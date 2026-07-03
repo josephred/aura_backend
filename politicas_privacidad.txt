@@ -1,0 +1,47 @@
+Políticas de Privacidad — AURA Salud
+Última actualización: 3 de julio de 2026
+
+En AURA Salud (en adelante, "la Aplicación" o "el Servicio"), operado por Aura Salud S.A. (en adelante, "nosotros" o "la Empresa"), nos tomamos muy en serio la privacidad y seguridad de sus datos personales. Esta Política de Privacidad describe cómo recopilamos, utilizamos, almacenamos y protegemos su información cuando utiliza nuestra aplicación móvil y los servicios asociados.
+
+Al descargar, instalar o utilizar la Aplicación, usted acepta las prácticas descritas en esta política.
+
+1. Información que Recopilamos
+Para proporcionarle servicios clínicos y de salud a domicilio de alta calidad, recopilamos la siguiente información:
+
+Datos de Registro: Nombre completo, dirección de correo electrónico, contraseña cifrada y número de teléfono móvil.
+Información de Identidad Social (Opcional): Si decide iniciar sesión mediante Google o Facebook, recopilamos su ID único de proveedor, dirección de correo electrónico y nombre público suministrados por el proveedor de autenticación.
+Información de Salud y Clínica: Descripción de síntomas, antecedentes médicos generales, recetas médicas (incluyendo archivos de imagen o documentos adjuntos) y datos de dependientes (familiares asociados para los cuales solicita atención).
+Datos de Ubicación: Coordenadas de geolocalización o direcciones ingresadas manualmente para poder coordinar y despachar al especialista clínico o ambulancia hacia su domicilio.
+Información de Pago: Procesamos los cobros a través de pasarelas de pago integradas (Mercado Pago). Nosotros no almacenamos los números completos de sus tarjetas de crédito o débito en nuestros servidores; estos se procesan de forma segura a través de los servidores cifrados de la pasarela.
+Tokens de Dispositivo: Registramos el identificador único de notificaciones push de su dispositivo (FCM Token) para enviarle actualizaciones en tiempo real sobre el estado de su médico y mensajes de chat.
+2. Uso de la Información
+Utilizamos la información recopilada exclusivamente para los siguientes fines:
+
+Gestionar y agendar sus solicitudes de atención de salud a domicilio.
+Permitir la comunicación por chat en tiempo real entre el paciente y el médico asignado.
+Procesar los pagos de las prestaciones clínicas.
+Brindar soporte técnico y resolver inconvenientes con el servicio.
+Enviar notificaciones sobre el estado de su trayecto, confirmaciones de reserva y alertas del sistema.
+Cumplir con las normativas legales de salud vigentes en relación con el resguardo de información de fichas clínicas.
+3. Almacenamiento y Protección de Datos
+Cifrado Local: Toda la información médica, direcciones, chats e historial de atención almacenada de forma temporal en su dispositivo se encuentra bajo un sistema de base de datos cifrada localmente mediante SQLCipher (AES-256). La clave de cifrado se genera aleatoriamente y se guarda de forma segura en el llavero de hardware del dispositivo (KeyStore en Android / Keychain en iOS).
+Seguridad de Servidor: Toda la comunicación entre la aplicación móvil y nuestros servidores se realiza mediante protocolos seguros cifrados HTTPS/TLS. El token de acceso a la cuenta del usuario se guarda en almacenamiento encriptado seguro en el dispositivo móvil.
+4. Compartición de Datos con Terceros
+No vendemos, comercializamos ni transferimos su información personal a terceros, excepto en los siguientes casos necesarios para la operación:
+
+Especialistas Médicos y Clínicos: El profesional asignado a su atención tendrá acceso a su nombre, dirección, síntomas y recetas asociadas para poder prestarle la atención de salud de manera adecuada.
+Pasarelas de Pago: Proveedores como Mercado Pago para completar transacciones financieras.
+Servicios de Notificación (Firebase): Google Firebase Cloud Messaging para la entrega de alertas Push en su dispositivo.
+5. Sus Derechos de Control (Derechos ARCO)
+Usted tiene derecho a:
+
+Acceder a los datos personales que mantenemos sobre usted.
+Rectificar o actualizar cualquier información incorrecta.
+Eliminar su cuenta y sus datos personales de nuestros registros activos cuando lo solicite.
+Oponerse o restringir el procesamiento de ciertas solicitudes.
+Para ejercer cualquiera de estos derechos, o si tiene dudas sobre esta Política de Privacidad, puede contactarnos enviando un correo a: 
+
+soporte@aurasalud.app
+
+6. Modificaciones a esta Política
+Nos reservamos el derecho de actualizar esta política de privacidad en cualquier momento. Le notificaremos cualquier cambio sustancial mediante la publicación de la nueva política dentro de la Aplicación o mediante avisos en nuestro sitio web.
