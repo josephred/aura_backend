@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\DependentController;
 use App\Http\Controllers\AddressController;
@@ -17,6 +18,10 @@ Route::post('/auth/social', [SocialAuthController::class, 'loginOrRegister']);
 
 // 1. Clinical Services Catalog (public)
 Route::get('/services', [ServiceController::class, 'index']);
+
+// Payment notifications from Mercado Pago (public; payment data is
+// re-fetched server-side so the body cannot be forged)
+Route::post('/webhooks/mercadopago', [PaymentWebhookController::class, 'mercadoPago']);
 
 Route::middleware('auth:sanctum')->group(function () {
     // 0b. Authenticated session
@@ -46,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
     Route::post('/bookings/{id}/simulate-step', [BookingController::class, 'simulateStep']);
     Route::get('/bookings/{id}/sse', [BookingController::class, 'streamStatus']);
+    Route::get('/bookings/{id}/payment-status', [BookingController::class, 'paymentStatus']);
 
     // 5. Chat tele-assistance & Simulated Responses
     Route::get('/bookings/{requestId}/chat', [ChatController::class, 'index']);

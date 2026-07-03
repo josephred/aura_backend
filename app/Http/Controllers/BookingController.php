@@ -7,6 +7,7 @@ use App\Models\ClinicalService;
 use App\Models\Dependent;
 use App\Models\ChatMessage;
 use App\Models\PastService;
+use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -58,7 +59,7 @@ class BookingController extends Controller
             'id' => $requestId,
             'user_id' => auth()->id(),
             'service_id' => $validated['service_id'],
-            'status' => 'accepted', // Immediately accepted per mock logic
+            'status' => 'pending_payment',
             'patient_type' => $validated['patient_type'],
             'dependent_id' => $validated['dependent_id'] ?? null,
             'address_text' => $validated['address_text'],
@@ -70,20 +71,55 @@ class BookingController extends Controller
             'prescription_preview' => $validated['prescription_preview'] ?? null,
             'prescription_file' => $validated['prescription_file'] ?? null,
             'exam_required' => $validated['exam_required'] ?? null,
-            'payment_method' => 'mercadopago', // Simulated payment method
+            'payment_method' => 'mercadopago',
             'final_price' => $validated['final_price'],
             'start_time' => $timeStr,
             'eta_minutes' => $validated['eta_minutes'],
-            'current_step' => 1,
+            'current_step' => 0,
         ]);
 
-        // Prepopulate chat messages for this request
         $service = ClinicalService::find($validated['service_id']);
         $serviceTitle = $service ? $service->short_title : 'Servicio';
 
+        $mercadoPago = app(MercadoPagoService::class);
+        if ($mercadoPago->isConfigured()) {
+            $preference = $mercadoPago->createPreference($serviceRequest, $serviceTitle);
+            if ($preference) {
+                $serviceRequest->update([
+                    'payment_preference_id' => $preference['id'],
+                    'payment_url' => $preference['init_point'],
+                    'payment_status' => 'pending',
+                ]);
+                return response()->json($serviceRequest->fresh(), 201);
+            }
+        }
+
+        // Gateway not configured or unreachable: activate immediately (simulated payment)
+        $this->activateBooking($serviceRequest, $serviceTitle);
+
+        return response()->json($serviceRequest->fresh(), 201);
+    }
+
+    /**
+     * Mark a booking as paid/accepted and open its clinical chat channel.
+     */
+    private function activateBooking(ServiceRequest $serviceRequest, ?string $serviceTitle = null): void
+    {
+        if ($serviceTitle === null) {
+            $service = ClinicalService::find($serviceRequest->service_id);
+            $serviceTitle = $service ? $service->short_title : 'Servicio';
+        }
+
+        $timeStr = date('H:i');
+
+        $serviceRequest->update([
+            'status' => 'accepted',
+            'current_step' => 1,
+        ]);
+
         ChatMessage::create([
             'id' => 'm1_' . time(),
-            'service_request_id' => $requestId,
+            'service_request_id' => $serviceRequest->id,
             'sender' => 'system',
             'text' => "Canal clínico seguro iniciado para: $serviceTitle.",
             'timestamp' => $timeStr,
@@ -91,13 +127,54 @@ class BookingController extends Controller
 
         ChatMessage::create([
             'id' => 'm2_' . time(),
-            'service_request_id' => $requestId,
+            'service_request_id' => $serviceRequest->id,
             'sender' => 'provider',
             'text' => "Hola, soy el especialista asignado para tu atención de $serviceTitle. Ya estoy coordinando los insumos médicos necesarios y me dirijo hacia tu ubicación. ¿Hay algún detalle adicional que deba saber del paciente?",
             'timestamp' => $timeStr,
         ]);
+    }
 
-        return response()->json($serviceRequest, 201);
+    /**
+     * Approve a booking after its payment is confirmed. Idempotent.
+     */
+    public function approvePayment(ServiceRequest $serviceRequest, string $paymentId): void
+    {
+        if ($serviceRequest->payment_status === 'approved') {
+            return;
+        }
+
+        $serviceRequest->update([
+            'payment_status' => 'approved',
+            'payment_id' => $paymentId,
+        ]);
+
+        if ($serviceRequest->status === 'pending_payment') {
+            $this->activateBooking($serviceRequest);
+        }
+    }
+
+    /**
+     * Check (and refresh from Mercado Pago) the payment status of a booking.
+     */
+    public function paymentStatus(string $id): JsonResponse
+    {
+        $serviceRequest = ServiceRequest::where('user_id', auth()->id())->where('id', $id)->first();
+
+        if (!$serviceRequest) {
+            return response()->json(['error' => 'Request not found'], 404);
+        }
+
+        if ($serviceRequest->status === 'pending_payment') {
+            $mercadoPago = app(MercadoPagoService::class);
+            if ($mercadoPago->isConfigured()) {
+                $payment = $mercadoPago->findApprovedPayment($serviceRequest->id);
+                if ($payment) {
+                    $this->approvePayment($serviceRequest, (string) $payment['id']);
+                }
+            }
+        }
+
+        return response()->json($serviceRequest->fresh());
     }
 
     /**

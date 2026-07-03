@@ -32,6 +32,14 @@ return [
         'access_key' => env('DOCTOR_PORTAL_ACCESS_KEY'),
     ],
 
+    'mercadopago' => [
+        'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
+        'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),
+        // Public HTTPS URL for payment webhooks (e.g. an ngrok tunnel in dev);
+        // leave empty to rely on in-app payment status polling only
+        'webhook_url' => env('MERCADOPAGO_WEBHOOK_URL'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
