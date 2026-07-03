@@ -8,6 +8,10 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/politica-privacidad', function () {
+    return view('privacy');
+});
+
 // Staff login for the doctor portal
 Route::get('/doctor/login', [StaffAuthController::class, 'showLogin']);
 Route::post('/doctor/login', [StaffAuthController::class, 'login'])->middleware('throttle:10,1');
