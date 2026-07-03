@@ -7,6 +7,7 @@ use App\Models\ClinicalService;
 use App\Models\Dependent;
 use App\Models\ChatMessage;
 use App\Models\PastService;
+use App\Services\FcmService;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -132,6 +133,13 @@ class BookingController extends Controller
             'text' => "Hola, soy el especialista asignado para tu atención de $serviceTitle. Ya estoy coordinando los insumos médicos necesarios y me dirijo hacia tu ubicación. ¿Hay algún detalle adicional que deba saber del paciente?",
             'timestamp' => $timeStr,
         ]);
+
+        app(FcmService::class)->notifyUser(
+            $serviceRequest->user_id,
+            'Atención confirmada',
+            "Tu solicitud de $serviceTitle fue confirmada. El especialista ya está en coordinación.",
+            ['booking_id' => $serviceRequest->id, 'status' => 'accepted'],
+        );
     }
 
     /**
@@ -228,6 +236,19 @@ class BookingController extends Controller
             'status' => $nextStatus,
             'current_step' => $nextStep,
         ]);
+
+        $stepNotifications = [
+            2 => ['En camino', 'El profesional va en camino a tu domicilio.'],
+            3 => ['Atención en curso', 'El profesional llegó y la atención está en curso.'],
+            4 => ['Atención completada', 'Tu atención finalizó. El resumen ya está en tu historial.'],
+        ];
+        [$notifTitle, $notifBody] = $stepNotifications[$nextStep];
+        app(FcmService::class)->notifyUser(
+            $serviceRequest->user_id,
+            $notifTitle,
+            $notifBody,
+            ['booking_id' => $serviceRequest->id, 'status' => $nextStatus],
+        );
 
         $timeStr = date('H:i');
 

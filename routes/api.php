@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\DependentController;
@@ -44,6 +45,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
     Route::post('/payment-methods', [PaymentMethodController::class, 'store']);
     Route::delete('/payment-methods/{id}', [PaymentMethodController::class, 'destroy']);
+
+    // 3b. Push notification device tokens
+    Route::post('/device-tokens', [DeviceTokenController::class, 'store']);
+    Route::delete('/device-tokens', [DeviceTokenController::class, 'destroy']);
 
     // 4. Booking Management
     Route::get('/bookings/active', [BookingController::class, 'active']);

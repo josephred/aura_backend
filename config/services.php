@@ -32,6 +32,21 @@ return [
         'access_key' => env('DOCTOR_PORTAL_ACCESS_KEY'),
     ],
 
+    'google' => [
+        // OAuth client id used as the required audience of Google id_tokens
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+    ],
+
+    'facebook' => [
+        'app_id' => env('FACEBOOK_APP_ID'),
+        'app_secret' => env('FACEBOOK_APP_SECRET'),
+    ],
+
+    'firebase' => [
+        // Absolute path to the Firebase service-account JSON file
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
+
     'mercadopago' => [
         'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
         'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),

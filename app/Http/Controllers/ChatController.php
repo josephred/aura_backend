@@ -72,6 +72,13 @@ class ChatController extends Controller
             'timestamp' => $timeStr,
         ]);
 
+        app(\App\Services\FcmService::class)->notifyUser(
+            $serviceRequest->user_id,
+            'Nuevo mensaje del equipo clínico',
+            $replyText,
+            ['booking_id' => $requestId, 'type' => 'chat'],
+        );
+
         return response()->json([
             'patient_message' => $patientMessage,
             'provider_message' => $providerMessage

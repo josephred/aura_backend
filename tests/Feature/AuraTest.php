@@ -204,24 +204,33 @@ class AuraTest extends TestCase
     }
 
     /**
-     * Test social login and registration flows.
+     * Test social login with server-side verified Google id_tokens.
      */
     public function test_social_authentication_flows(): void
     {
-        // 1. Register a new user via Google
+        config(['services.google.client_id' => 'aura-client-id.apps.googleusercontent.com']);
+
+        \Illuminate\Support\Facades\Http::fake([
+            'oauth2.googleapis.com/tokeninfo*' => \Illuminate\Support\Facades\Http::response([
+                'aud' => 'aura-client-id.apps.googleusercontent.com',
+                'sub' => 'google_123456',
+                'email' => 'googleuser@aura.cl',
+                'email_verified' => 'true',
+                'name' => 'Google User',
+            ]),
+        ]);
+
+        // 1. Register a new user via Google (identity comes from the verified token)
         $response = $this->postJson('/api/auth/social', [
             'provider' => 'google',
-            'provider_id' => 'google_123456',
-            'email' => 'googleuser@aura.cl',
-            'name' => 'Google User',
+            'credential' => 'valid-google-id-token',
         ]);
         $response->assertStatus(201)
-                 ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']]);
-        
-        $token = $response->json('token');
+                 ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']])
+                 ->assertJsonPath('user.email', 'googleuser@aura.cl');
+
         $userId = $response->json('user.id');
 
-        // Verify social account link in DB
         $this->assertDatabaseHas('social_accounts', [
             'user_id' => $userId,
             'provider' => 'google',
@@ -231,28 +240,59 @@ class AuraTest extends TestCase
         // 2. Login again with Google -> should get 200 and same user
         $response = $this->postJson('/api/auth/social', [
             'provider' => 'google',
-            'provider_id' => 'google_123456',
-            'email' => 'googleuser@aura.cl',
-            'name' => 'Google User',
+            'credential' => 'valid-google-id-token',
         ]);
         $response->assertStatus(200)
                  ->assertJsonPath('user.id', $userId);
+    }
 
-        // 3. Link an existing user with a new social network (Facebook) by email
-        $response = $this->postJson('/api/auth/social', [
-            'provider' => 'facebook',
-            'provider_id' => 'fb_987654',
-            'email' => 'googleuser@aura.cl',
-            'name' => 'FB User',
-        ]);
-        // Should return 201 (since it's a new link) and return same user id
-        $response->assertStatus(201)
-                 ->assertJsonPath('user.id', $userId);
+    /**
+     * Test that forged or foreign-audience tokens cannot authenticate.
+     */
+    public function test_social_login_rejects_invalid_tokens(): void
+    {
+        config(['services.google.client_id' => 'aura-client-id.apps.googleusercontent.com']);
 
-        $this->assertDatabaseHas('social_accounts', [
-            'user_id' => $userId,
-            'provider' => 'facebook',
-            'provider_id' => 'fb_987654',
+        // Token issued for ANOTHER app (wrong audience) must be rejected
+        \Illuminate\Support\Facades\Http::fake([
+            'oauth2.googleapis.com/tokeninfo*' => \Illuminate\Support\Facades\Http::response([
+                'aud' => 'attacker-app.apps.googleusercontent.com',
+                'sub' => 'google_999',
+                'email' => 'victima@aura.cl',
+                'email_verified' => 'true',
+            ]),
         ]);
+
+        $this->postJson('/api/auth/social', [
+            'provider' => 'google',
+            'credential' => 'token-from-another-app',
+        ])->assertStatus(401);
+
+        // Client-supplied identity fields are ignored by validation
+        $this->postJson('/api/auth/social', [
+            'provider' => 'google',
+            'email' => 'victima@aura.cl',
+            'provider_id' => 'x',
+            'name' => 'Atacante',
+        ])->assertStatus(422);
+    }
+
+    /**
+     * Test that unconfigured providers are unavailable.
+     */
+    public function test_social_login_unavailable_when_not_configured(): void
+    {
+        config(['services.google.client_id' => null]);
+
+        $this->postJson('/api/auth/social', [
+            'provider' => 'google',
+            'credential' => 'whatever',
+        ])->assertStatus(503);
+
+        // Instagram is no longer an accepted provider
+        $this->postJson('/api/auth/social', [
+            'provider' => 'instagram',
+            'credential' => 'whatever',
+        ])->assertStatus(422);
     }
 }
