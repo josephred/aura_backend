@@ -60,7 +60,7 @@ class BookingController extends Controller
             'service_id' => $validated['service_id'],
             'status' => 'accepted', // Immediately accepted per mock logic
             'patient_type' => $validated['patient_type'],
-            'dependent_id' => $validated['dependent_id'],
+            'dependent_id' => $validated['dependent_id'] ?? null,
             'address_text' => $validated['address_text'],
             'origin_address' => $validated['origin_address'] ?? null,
             'destination_address' => $validated['destination_address'] ?? null,

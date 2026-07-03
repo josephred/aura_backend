@@ -38,6 +38,29 @@ class DependentController extends Controller
     }
 
     /**
+     * Update the specified dependent in storage.
+     */
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $dependent = Dependent::where('user_id', auth()->id())->where('id', $id)->first();
+        if (!$dependent) {
+            return response()->json(['error' => 'Dependent not found'], 404);
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string',
+            'relationship' => 'required|string',
+            'age' => 'required|integer',
+            'health_insurance' => 'required|string',
+            'medical_conditions' => 'nullable|string',
+        ]);
+
+        $dependent->update($validated);
+
+        return response()->json($dependent);
+    }
+
+    /**
      * Remove the specified dependent from storage.
      */
     public function destroy(string $id): JsonResponse
