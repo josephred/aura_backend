@@ -261,4 +261,57 @@ class BookingController extends Controller
 
         return response()->json($history);
     }
+
+    /**
+     * Stream status updates for a specific booking request using Server-Sent Events (SSE).
+     */
+    public function streamStatus($id)
+    {
+        return response()->stream(function () use ($id) {
+            $lastStatus = null;
+            $lastStep = null;
+            $lastMessageCount = null;
+
+            // Loop for up to 50 seconds to avoid exceeding webserver timeout limits
+            $elapsed = 0;
+            while ($elapsed < 50) {
+                $serviceRequest = \App\Models\ServiceRequest::find($id);
+
+                if (!$serviceRequest) {
+                    echo "data: " . json_encode(['error' => 'Not found']) . "\n\n";
+                    ob_flush();
+                    flush();
+                    break;
+                }
+
+                $messages = \App\Models\ChatMessage::where('service_request_id', $id)
+                    ->orderBy('created_at', 'asc')
+                    ->get();
+                $messageCount = $messages->count();
+
+                if ($serviceRequest->status !== $lastStatus || $serviceRequest->current_step !== $lastStep || $messageCount !== $lastMessageCount) {
+                    $lastStatus = $serviceRequest->status;
+                    $lastStep = $serviceRequest->current_step;
+                    $lastMessageCount = $messageCount;
+
+                    // Send payload
+                    echo "data: " . json_encode([
+                        'booking' => $serviceRequest,
+                        'message_count' => $messageCount,
+                        'messages' => $messages,
+                    ]) . "\n\n";
+                    ob_flush();
+                    flush();
+                }
+
+                sleep(1);
+                $elapsed += 1;
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no', // Disable buffering for Nginx
+        ]);
+    }
 }

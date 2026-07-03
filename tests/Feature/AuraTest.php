@@ -202,4 +202,57 @@ class AuraTest extends TestCase
                          ->postJson("/api/bookings/{$newBookingId}/cancel");
         $response->assertStatus(200)->assertJsonPath('status', 'cancelled');
     }
+
+    /**
+     * Test social login and registration flows.
+     */
+    public function test_social_authentication_flows(): void
+    {
+        // 1. Register a new user via Google
+        $response = $this->postJson('/api/auth/social', [
+            'provider' => 'google',
+            'provider_id' => 'google_123456',
+            'email' => 'googleuser@aura.cl',
+            'name' => 'Google User',
+        ]);
+        $response->assertStatus(201)
+                 ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']]);
+        
+        $token = $response->json('token');
+        $userId = $response->json('user.id');
+
+        // Verify social account link in DB
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $userId,
+            'provider' => 'google',
+            'provider_id' => 'google_123456',
+        ]);
+
+        // 2. Login again with Google -> should get 200 and same user
+        $response = $this->postJson('/api/auth/social', [
+            'provider' => 'google',
+            'provider_id' => 'google_123456',
+            'email' => 'googleuser@aura.cl',
+            'name' => 'Google User',
+        ]);
+        $response->assertStatus(200)
+                 ->assertJsonPath('user.id', $userId);
+
+        // 3. Link an existing user with a new social network (Facebook) by email
+        $response = $this->postJson('/api/auth/social', [
+            'provider' => 'facebook',
+            'provider_id' => 'fb_987654',
+            'email' => 'googleuser@aura.cl',
+            'name' => 'FB User',
+        ]);
+        // Should return 201 (since it's a new link) and return same user id
+        $response->assertStatus(201)
+                 ->assertJsonPath('user.id', $userId);
+
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $userId,
+            'provider' => 'facebook',
+            'provider_id' => 'fb_987654',
+        ]);
+    }
 }
