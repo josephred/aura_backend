@@ -278,6 +278,62 @@ class AuraTest extends TestCase
     }
 
     /**
+     * Test Facebook login with server-side verified access tokens.
+     */
+    public function test_facebook_login_verifies_token_server_side(): void
+    {
+        config([
+            'services.facebook.app_id' => '123456',
+            'services.facebook.app_secret' => 'fb-secret',
+        ]);
+
+        \Illuminate\Support\Facades\Http::fake([
+            'graph.facebook.com/debug_token*' => \Illuminate\Support\Facades\Http::response([
+                'data' => ['is_valid' => true, 'app_id' => '123456', 'user_id' => 'fb_777'],
+            ]),
+            'graph.facebook.com/me*' => \Illuminate\Support\Facades\Http::response([
+                'id' => 'fb_777',
+                'name' => 'FB User',
+                'email' => 'fbuser@aura.cl',
+            ]),
+        ]);
+
+        $response = $this->postJson('/api/auth/social', [
+            'provider' => 'facebook',
+            'credential' => 'valid-fb-access-token',
+        ]);
+        $response->assertStatus(201)
+                 ->assertJsonPath('user.email', 'fbuser@aura.cl');
+
+        $this->assertDatabaseHas('social_accounts', [
+            'provider' => 'facebook',
+            'provider_id' => 'fb_777',
+        ]);
+    }
+
+    /**
+     * Test that a token issued for another Facebook app is rejected.
+     */
+    public function test_facebook_login_rejects_foreign_app_token(): void
+    {
+        config([
+            'services.facebook.app_id' => '123456',
+            'services.facebook.app_secret' => 'fb-secret',
+        ]);
+
+        \Illuminate\Support\Facades\Http::fake([
+            'graph.facebook.com/debug_token*' => \Illuminate\Support\Facades\Http::response([
+                'data' => ['is_valid' => true, 'app_id' => '999999', 'user_id' => 'fb_777'],
+            ]),
+        ]);
+
+        $this->postJson('/api/auth/social', [
+            'provider' => 'facebook',
+            'credential' => 'token-from-other-app',
+        ])->assertStatus(401);
+    }
+
+    /**
      * Test that unconfigured providers are unavailable.
      */
     public function test_social_login_unavailable_when_not_configured(): void
