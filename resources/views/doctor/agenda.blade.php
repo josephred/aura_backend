@@ -124,12 +124,15 @@
                 const dt = new Date(a.scheduled_at);
                 const when = dt.toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
                 const canAct = ['confirmed', 'pending_payment'].includes(a.status);
-                const actions = canAct ? `
+                const joinBtn = a.joinable ? `
+                    <button class="primary" style="font-size:12px;padding:5px 9px;background:#7C3AED" onclick="joinVideo('${a.id}')">🎥 Unirse</button>` : '';
+                const actions = (a.joinable ? joinBtn : '') + (canAct ? `
                     <button class="primary" style="font-size:12px;padding:5px 9px" onclick="setStatus('${a.id}','completed')">Completada</button>
                     <button class="danger" onclick="setStatus('${a.id}','no_show')">No asistió</button>
-                    <button class="danger" onclick="setStatus('${a.id}','cancelled')">Cancelar</button>` : '';
+                    <button class="danger" onclick="setStatus('${a.id}','cancelled')">Cancelar</button>` : '');
+                const kind = a.type === 'video' ? ' 🎥' : '';
                 return `<tr>
-                    <td>${when}</td>
+                    <td>${when}${kind}</td>
                     <td>${a.patient_name ?? '—'}</td>
                     <td>${a.professional_name ?? '—'}</td>
                     <td>${a.reason ?? '—'}</td>
@@ -137,6 +140,15 @@
                     <td class="actions">${actions}</td>
                 </tr>`;
             }).join('');
+        }
+
+        async function joinVideo(id) {
+            const data = await api(`/doctor/api/appointments/${id}/video-join`);
+            if (data.join_url) {
+                window.open(data.join_url, '_blank');
+            } else {
+                alert(data.error ?? 'No se pudo abrir la videoconsulta.');
+            }
         }
 
         async function setStatus(id, status) {

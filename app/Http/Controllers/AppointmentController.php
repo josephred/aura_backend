@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\Professional;
+use App\Services\DailyService;
 use App\Services\FcmService;
 use App\Services\MercadoPagoService;
 use Carbon\Carbon;
@@ -109,6 +110,7 @@ class AppointmentController extends Controller
             'scheduled_at' => 'required|date',
             'dependent_id' => 'nullable|string|exists:dependents,id',
             'reason' => 'nullable|string|max:500',
+            'type' => 'nullable|string|in:presencial,video',
         ]);
 
         $professional = Professional::where('active', true)->find($validated['professional_id']);
@@ -153,6 +155,7 @@ class AppointmentController extends Controller
                 'scheduled_at' => $scheduledAt,
                 'duration_minutes' => $professional->consultation_duration_minutes,
                 'reason' => $validated['reason'] ?? null,
+                'type' => $validated['type'] ?? 'presencial',
                 'status' => 'pending_payment',
                 'price' => $professional->consultation_price,
             ]);
@@ -195,15 +198,87 @@ class AppointmentController extends Controller
     {
         $appointment->update(['status' => 'confirmed']);
 
+        // Video consultations get a private Daily room living until well
+        // after the scheduled end
+        if ($appointment->type === 'video' && empty($appointment->video_room_name)) {
+            $daily = app(DailyService::class);
+            if ($daily->isConfigured()) {
+                $room = $daily->createRoom(
+                    $appointment->id,
+                    $appointment->scheduled_at->copy()->addMinutes($appointment->duration_minutes + 60),
+                );
+                if ($room) {
+                    $appointment->update([
+                        'video_room_name' => $room['name'],
+                        'video_room_url' => $room['url'],
+                    ]);
+                }
+            }
+        }
+
         $professional = $appointment->professional;
         $when = $this->formatDateEs($appointment->scheduled_at);
+        $kind = $appointment->type === 'video' ? 'videoconsulta' : 'cita';
 
         app(FcmService::class)->notifyUser(
             $appointment->user_id,
             'Cita confirmada',
-            "Tu cita con {$professional->name} quedó agendada para el $when.",
+            "Tu $kind con {$professional->name} quedó agendada para el $when.",
             ['appointment_id' => $appointment->id, 'type' => 'appointment'],
         );
+    }
+
+    /**
+     * Join window: from 15 minutes before the start until 30 minutes
+     * after the scheduled end.
+     */
+    public static function isJoinable(Appointment $appointment): bool
+    {
+        $start = $appointment->scheduled_at;
+        $end = $start->copy()->addMinutes($appointment->duration_minutes + 30);
+
+        return now()->gte($start->copy()->subMinutes(15)) && now()->lte($end);
+    }
+
+    /**
+     * Meeting credentials for the patient to join their video consultation.
+     */
+    public function videoJoin(string $id): JsonResponse
+    {
+        $appointment = Appointment::where('user_id', auth()->id())->find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+
+        if ($appointment->type !== 'video' || $appointment->status !== 'confirmed') {
+            return response()->json(['error' => 'Esta cita no tiene videoconsulta activa'], 422);
+        }
+
+        if (empty($appointment->video_room_url)) {
+            return response()->json(['error' => 'La sala de video aún no está disponible'], 503);
+        }
+
+        if (!self::isJoinable($appointment)) {
+            $when = $this->formatDateEs($appointment->scheduled_at);
+            return response()->json(['error' => "Podrás unirte 15 minutos antes de tu cita ($when)."], 422);
+        }
+
+        $token = app(DailyService::class)->createMeetingToken(
+            $appointment->video_room_name,
+            auth()->user()->name,
+            false,
+            now()->addHours(2),
+        );
+
+        if (!$token) {
+            return response()->json(['error' => 'No se pudo generar el acceso. Intenta de nuevo.'], 503);
+        }
+
+        return response()->json([
+            'room_url' => $appointment->video_room_url,
+            'token' => $token,
+            'join_url' => $appointment->video_room_url . '?t=' . $token,
+        ]);
     }
 
     /**
@@ -301,6 +376,8 @@ class AppointmentController extends Controller
             'scheduled_at' => $appointment->scheduled_at->toIso8601String(),
             'duration_minutes' => $appointment->duration_minutes,
             'reason' => $appointment->reason,
+            'type' => $appointment->type ?? 'presencial',
+            'has_video_room' => !empty($appointment->video_room_url),
             'status' => $appointment->status,
             'price' => $appointment->price,
             'payment_url' => $appointment->payment_url,

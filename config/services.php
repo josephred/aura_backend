@@ -47,6 +47,11 @@ return [
         'credentials' => env('FIREBASE_CREDENTIALS'),
     ],
 
+    'daily' => [
+        // API key from dashboard.daily.co (Developers > API keys)
+        'api_key' => env('DAILY_API_KEY'),
+    ],
+
     'mercadopago' => [
         'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
         'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),

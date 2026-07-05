@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Dependent;
 use App\Models\ProfessionalSchedule;
+use App\Services\DailyService;
 use App\Services\FcmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,6 +46,11 @@ class DoctorAgendaController extends Controller
                     'patient_name' => $patient,
                     'professional_name' => $apt->professional?->name,
                     'reason' => $apt->reason,
+                    'type' => $apt->type ?? 'presencial',
+                    'joinable' => $apt->type === 'video'
+                        && $apt->status === 'confirmed'
+                        && !empty($apt->video_room_url)
+                        && AppointmentController::isJoinable($apt),
                     'status' => $apt->status,
                     'price' => $apt->price,
                 ];
@@ -79,6 +85,36 @@ class DoctorAgendaController extends Controller
         }
 
         return response()->json(['success' => true, 'appointment' => $appointment->fresh()]);
+    }
+
+    /**
+     * Meeting credentials for the clinical staff to join a video consultation.
+     */
+    public function videoJoin(string $id): JsonResponse
+    {
+        $appointment = Appointment::with('professional')->find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+
+        if ($appointment->type !== 'video' || empty($appointment->video_room_name)) {
+            return response()->json(['error' => 'Esta cita no tiene sala de video'], 422);
+        }
+
+        $token = app(DailyService::class)->createMeetingToken(
+            $appointment->video_room_name,
+            $appointment->professional?->name ?? 'Equipo clínico Aura',
+            true,
+            now()->addHours(3),
+        );
+
+        if (!$token) {
+            return response()->json(['error' => 'No se pudo generar el acceso'], 503);
+        }
+
+        return response()->json([
+            'join_url' => $appointment->video_room_url . '?t=' . $token,
+        ]);
     }
 
     /**
