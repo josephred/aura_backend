@@ -23,3 +23,7 @@ Artisan::command('fcm:test {userId} {title} {body}', function (\App\Services\Fcm
     $fcmService->notifyUser((int)$userId, $title, $body, ['type' => 'test']);
     $this->info('Done!');
 })->purpose('Send a test FCM push notification to a user');
+
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('appointments:send-reminders')->everyFiveMinutes();

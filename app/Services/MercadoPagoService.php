@@ -21,22 +21,41 @@ class MercadoPagoService
      */
     public function createPreference(ServiceRequest $booking, string $serviceTitle): ?array
     {
+        return $this->createGenericPreference(
+            $booking->id,
+            $booking->service_id,
+            "Aura Salud — {$serviceTitle}",
+            'Atención clínica a domicilio',
+            (float) $booking->final_price,
+            ['booking_id' => $booking->id, 'user_id' => $booking->user_id],
+        );
+    }
+
+    /**
+     * Create a Checkout Pro preference for any payable entity.
+     * Returns ['id' => ..., 'init_point' => ...] or null on failure.
+     */
+    public function createGenericPreference(
+        string $externalReference,
+        string $itemId,
+        string $title,
+        string $description,
+        float $price,
+        array $metadata = [],
+    ): ?array {
         $payload = [
             'items' => [[
-                'id' => $booking->service_id,
-                'title' => "Aura Salud — {$serviceTitle}",
-                'description' => 'Atención clínica a domicilio',
+                'id' => $itemId,
+                'title' => $title,
+                'description' => $description,
                 'category_id' => 'services',
                 'quantity' => 1,
                 'currency_id' => 'CLP',
-                'unit_price' => (float) $booking->final_price,
+                'unit_price' => $price,
             ]],
-            'external_reference' => $booking->id,
+            'external_reference' => $externalReference,
             'statement_descriptor' => 'AURA SALUD',
-            'metadata' => [
-                'booking_id' => $booking->id,
-                'user_id' => $booking->user_id,
-            ],
+            'metadata' => $metadata,
         ];
 
         $webhookUrl = config('services.mercadopago.webhook_url');
@@ -57,13 +76,13 @@ class MercadoPagoService
             }
 
             Log::warning('MercadoPago preference creation failed', [
-                'booking' => $booking->id,
+                'reference' => $externalReference,
                 'status' => $response->status(),
                 'body' => $response->json(),
             ]);
         } catch (\Throwable $e) {
             Log::warning('MercadoPago unreachable while creating preference', [
-                'booking' => $booking->id,
+                'reference' => $externalReference,
                 'error' => $e->getMessage(),
             ]);
         }

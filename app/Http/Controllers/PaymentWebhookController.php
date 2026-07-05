@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\ServiceRequest;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\JsonResponse;
@@ -32,16 +33,21 @@ class PaymentWebhookController extends Controller
             return response()->json(['message' => 'not approved yet']);
         }
 
-        $bookingId = $payment['external_reference'] ?? null;
-        $booking = $bookingId ? ServiceRequest::find($bookingId) : null;
+        $reference = $payment['external_reference'] ?? null;
 
-        if (!$booking) {
-            Log::warning('MercadoPago webhook for unknown booking', ['payment' => $paymentId, 'ref' => $bookingId]);
-            return response()->json(['message' => 'booking not found']);
+        $booking = $reference ? ServiceRequest::find($reference) : null;
+        if ($booking) {
+            app(BookingController::class)->approvePayment($booking, (string) $paymentId);
+            return response()->json(['message' => 'ok']);
         }
 
-        app(BookingController::class)->approvePayment($booking, (string) $paymentId);
+        $appointment = $reference ? Appointment::find($reference) : null;
+        if ($appointment) {
+            app(AppointmentController::class)->approvePayment($appointment, (string) $paymentId);
+            return response()->json(['message' => 'ok']);
+        }
 
-        return response()->json(['message' => 'ok']);
+        Log::warning('MercadoPago webhook for unknown reference', ['payment' => $paymentId, 'ref' => $reference]);
+        return response()->json(['message' => 'reference not found']);
     }
 }

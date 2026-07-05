@@ -912,6 +912,7 @@
             <div class="logo-badge">Portal Médico</div>
         </div>
         <div class="doctor-profile">
+            <a href="/doctor/agenda" style="color:#2DD4BF;text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">📅 Agenda de citas</a>
             <div class="profile-info">
                 <div class="profile-name">Dr. Sebastián Leyton</div>
                 <div class="profile-role">Médico General de Guardia</div>

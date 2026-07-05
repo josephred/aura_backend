@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\PaymentWebhookController;
@@ -19,6 +20,10 @@ Route::post('/auth/social', [SocialAuthController::class, 'loginOrRegister']);
 
 // 1. Clinical Services Catalog (public)
 Route::get('/services', [ServiceController::class, 'index']);
+
+// 1b. Professionals catalog and availability (public)
+Route::get('/professionals', [AppointmentController::class, 'professionals']);
+Route::get('/professionals/{id}/slots', [AppointmentController::class, 'slots']);
 
 // Payment notifications from Mercado Pago (public; payment data is
 // re-fetched server-side so the body cannot be forged)
@@ -57,6 +62,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/simulate-step', [BookingController::class, 'simulateStep']);
     Route::get('/bookings/{id}/sse', [BookingController::class, 'streamStatus']);
     Route::get('/bookings/{id}/payment-status', [BookingController::class, 'paymentStatus']);
+
+    // 4b. Scheduled Appointments
+    Route::get('/appointments', [AppointmentController::class, 'index']);
+    Route::post('/appointments', [AppointmentController::class, 'store']);
+    Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
+    Route::get('/appointments/{id}/payment-status', [AppointmentController::class, 'paymentStatus']);
 
     // 5. Chat tele-assistance & Simulated Responses
     Route::get('/bookings/{requestId}/chat', [ChatController::class, 'index']);
