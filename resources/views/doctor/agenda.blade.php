@@ -142,13 +142,8 @@
             }).join('');
         }
 
-        async function joinVideo(id) {
-            const data = await api(`/doctor/api/appointments/${id}/video-join`);
-            if (data.join_url) {
-                window.open(data.join_url, '_blank');
-            } else {
-                alert(data.error ?? 'No se pudo abrir la videoconsulta.');
-            }
+        function joinVideo(id) {
+            window.open(`/doctor/agenda/call/${id}`, '_blank');
         }
 
         async function setStatus(id, status) {

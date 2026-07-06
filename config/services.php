@@ -47,9 +47,13 @@ return [
         'credentials' => env('FIREBASE_CREDENTIALS'),
     ],
 
-    'daily' => [
-        // API key from dashboard.daily.co (Developers > API keys)
-        'api_key' => env('DAILY_API_KEY'),
+    'webrtc' => [
+        // Comma-separated STUN urls; replace with self-hosted coturn in prod
+        'stun_urls' => env('WEBRTC_STUN_URLS', 'stun:stun.l.google.com:19302'),
+        // Optional TURN relay (coturn) for networks that block direct P2P
+        'turn_url' => env('WEBRTC_TURN_URL'),
+        'turn_username' => env('WEBRTC_TURN_USERNAME'),
+        'turn_credential' => env('WEBRTC_TURN_CREDENTIAL'),
     ],
 
     'mercadopago' => [

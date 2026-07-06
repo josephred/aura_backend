@@ -51,6 +51,9 @@ class SendAppointmentReminders extends Command
             $sent++;
         }
 
+        // Drop stale WebRTC signaling rows from past calls
+        \App\Models\VideoSignal::where('created_at', '<', now()->subDay())->delete();
+
         $this->info("Reminders sent: $sent");
 
         return self::SUCCESS;

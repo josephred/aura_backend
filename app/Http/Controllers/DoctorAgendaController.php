@@ -5,8 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Dependent;
 use App\Models\ProfessionalSchedule;
-use App\Services\DailyService;
+use App\Models\VideoSignal;
 use App\Services\FcmService;
+use App\Services\WebRtcService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -49,7 +50,6 @@ class DoctorAgendaController extends Controller
                     'type' => $apt->type ?? 'presencial',
                     'joinable' => $apt->type === 'video'
                         && $apt->status === 'confirmed'
-                        && !empty($apt->video_room_url)
                         && AppointmentController::isJoinable($apt),
                     'status' => $apt->status,
                     'price' => $apt->price,
@@ -88,33 +88,93 @@ class DoctorAgendaController extends Controller
     }
 
     /**
-     * Meeting credentials for the clinical staff to join a video consultation.
+     * The in-portal video call page for a consultation.
      */
-    public function videoJoin(string $id): JsonResponse
+    public function callPage(string $id)
     {
-        $appointment = Appointment::with('professional')->find($id);
-        if (!$appointment) {
+        $appointment = Appointment::with(['professional', 'user'])->find($id);
+        abort_unless($appointment && $appointment->type === 'video', 404);
+
+        $patient = $appointment->user?->name ?? 'Paciente';
+        if ($appointment->dependent_id) {
+            $dependent = Dependent::find($appointment->dependent_id);
+            if ($dependent) {
+                $patient = $dependent->name;
+            }
+        }
+
+        return view('doctor.call', [
+            'appointment' => $appointment,
+            'patientName' => $patient,
+        ]);
+    }
+
+    /**
+     * WebRTC session config for the staff side of a video call.
+     */
+    public function webrtcConfig(string $id): JsonResponse
+    {
+        $appointment = Appointment::find($id);
+        if (!$appointment || $appointment->type !== 'video') {
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
 
-        if ($appointment->type !== 'video' || empty($appointment->video_room_name)) {
-            return response()->json(['error' => 'Esta cita no tiene sala de video'], 422);
-        }
-
-        $token = app(DailyService::class)->createMeetingToken(
-            $appointment->video_room_name,
-            $appointment->professional?->name ?? 'Equipo clínico Aura',
-            true,
-            now()->addHours(3),
-        );
-
-        if (!$token) {
-            return response()->json(['error' => 'No se pudo generar el acceso'], 503);
-        }
-
         return response()->json([
-            'join_url' => $appointment->video_room_url . '?t=' . $token,
+            'role' => 'staff',
+            'ice_servers' => app(WebRtcService::class)->iceServers(),
         ]);
+    }
+
+    /**
+     * Push a WebRTC signal from the staff side. A new offer starts a fresh
+     * session and clears every previous signal of the appointment.
+     */
+    public function postVideoSignal(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:offer,answer,candidate,ready,hangup',
+            'payload' => 'nullable',
+        ]);
+
+        $appointment = Appointment::find($id);
+        if (!$appointment || $appointment->type !== 'video') {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+
+        if ($validated['type'] === 'offer') {
+            VideoSignal::where('appointment_id', $appointment->id)->delete();
+        }
+
+        $payload = $validated['payload'] ?? null;
+        $signal = VideoSignal::create([
+            'appointment_id' => $appointment->id,
+            'sender' => 'staff',
+            'type' => $validated['type'],
+            'payload' => is_string($payload) ? $payload : json_encode($payload),
+        ]);
+
+        return response()->json(['id' => $signal->id], 201);
+    }
+
+    /**
+     * Signals sent by the patient, newer than the given id.
+     */
+    public function videoSignals(Request $request, string $id): JsonResponse
+    {
+        $after = (int) $request->query('after', 0);
+
+        $signals = VideoSignal::where('appointment_id', $id)
+            ->where('sender', 'patient')
+            ->where('id', '>', $after)
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'type' => $s->type,
+                'payload' => $s->payload ? json_decode($s->payload, true) : null,
+            ]);
+
+        return response()->json(['signals' => $signals]);
     }
 
     /**

@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\Professional;
-use App\Services\DailyService;
+use App\Models\VideoSignal;
 use App\Services\FcmService;
 use App\Services\MercadoPagoService;
+use App\Services\WebRtcService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -198,24 +199,6 @@ class AppointmentController extends Controller
     {
         $appointment->update(['status' => 'confirmed']);
 
-        // Video consultations get a private Daily room living until well
-        // after the scheduled end
-        if ($appointment->type === 'video' && empty($appointment->video_room_name)) {
-            $daily = app(DailyService::class);
-            if ($daily->isConfigured()) {
-                $room = $daily->createRoom(
-                    $appointment->id,
-                    $appointment->scheduled_at->copy()->addMinutes($appointment->duration_minutes + 60),
-                );
-                if ($room) {
-                    $appointment->update([
-                        'video_room_name' => $room['name'],
-                        'video_room_url' => $room['url'],
-                    ]);
-                }
-            }
-        }
-
         $professional = $appointment->professional;
         $when = $this->formatDateEs($appointment->scheduled_at);
         $kind = $appointment->type === 'video' ? 'videoconsulta' : 'cita';
@@ -241,11 +224,13 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Meeting credentials for the patient to join their video consultation.
+     * WebRTC session config for the patient to join their video consultation.
      */
     public function videoJoin(string $id): JsonResponse
     {
-        $appointment = Appointment::where('user_id', auth()->id())->find($id);
+        $appointment = Appointment::with('professional')
+            ->where('user_id', auth()->id())
+            ->find($id);
         if (!$appointment) {
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
@@ -254,31 +239,79 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'Esta cita no tiene videoconsulta activa'], 422);
         }
 
-        if (empty($appointment->video_room_url)) {
-            return response()->json(['error' => 'La sala de video aún no está disponible'], 503);
-        }
-
         if (!self::isJoinable($appointment)) {
             $when = $this->formatDateEs($appointment->scheduled_at);
             return response()->json(['error' => "Podrás unirte 15 minutos antes de tu cita ($when)."], 422);
         }
 
-        $token = app(DailyService::class)->createMeetingToken(
-            $appointment->video_room_name,
-            auth()->user()->name,
-            false,
-            now()->addHours(2),
-        );
+        return response()->json([
+            'role' => 'patient',
+            'ice_servers' => app(WebRtcService::class)->iceServers(),
+            'professional_name' => $appointment->professional?->name,
+        ]);
+    }
 
-        if (!$token) {
-            return response()->json(['error' => 'No se pudo generar el acceso. Intenta de nuevo.'], 503);
+    /**
+     * Push a WebRTC signal (answer/candidate/ready/hangup) from the patient.
+     */
+    public function postVideoSignal(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:offer,answer,candidate,ready,hangup',
+            'payload' => 'nullable',
+        ]);
+
+        $appointment = Appointment::where('user_id', auth()->id())->find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+        if ($appointment->type !== 'video' || $appointment->status !== 'confirmed') {
+            return response()->json(['error' => 'Esta cita no tiene videoconsulta activa'], 422);
         }
 
-        return response()->json([
-            'room_url' => $appointment->video_room_url,
-            'token' => $token,
-            'join_url' => $appointment->video_room_url . '?t=' . $token,
+        // Joining again replaces any previous join announcement
+        if ($validated['type'] === 'ready') {
+            VideoSignal::where('appointment_id', $appointment->id)
+                ->where('sender', 'patient')
+                ->where('type', 'ready')
+                ->delete();
+        }
+
+        $payload = $validated['payload'] ?? null;
+        $signal = VideoSignal::create([
+            'appointment_id' => $appointment->id,
+            'sender' => 'patient',
+            'type' => $validated['type'],
+            'payload' => is_string($payload) ? $payload : json_encode($payload),
         ]);
+
+        return response()->json(['id' => $signal->id], 201);
+    }
+
+    /**
+     * Signals sent by the clinical staff, newer than the given id.
+     */
+    public function videoSignals(Request $request, string $id): JsonResponse
+    {
+        $appointment = Appointment::where('user_id', auth()->id())->find($id);
+        if (!$appointment) {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+
+        $after = (int) $request->query('after', 0);
+
+        $signals = VideoSignal::where('appointment_id', $appointment->id)
+            ->where('sender', 'staff')
+            ->where('id', '>', $after)
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'type' => $s->type,
+                'payload' => $s->payload ? json_decode($s->payload, true) : null,
+            ]);
+
+        return response()->json(['signals' => $signals]);
     }
 
     /**
@@ -377,7 +410,6 @@ class AppointmentController extends Controller
             'duration_minutes' => $appointment->duration_minutes,
             'reason' => $appointment->reason,
             'type' => $appointment->type ?? 'presencial',
-            'has_video_room' => !empty($appointment->video_room_url),
             'status' => $appointment->status,
             'price' => $appointment->price,
             'payment_url' => $appointment->payment_url,

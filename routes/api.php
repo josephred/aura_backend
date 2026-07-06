@@ -69,6 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
     Route::get('/appointments/{id}/payment-status', [AppointmentController::class, 'paymentStatus']);
     Route::get('/appointments/{id}/video-join', [AppointmentController::class, 'videoJoin']);
+    Route::post('/appointments/{id}/video-signals', [AppointmentController::class, 'postVideoSignal']);
+    Route::get('/appointments/{id}/video-signals', [AppointmentController::class, 'videoSignals']);
 
     // 5. Chat tele-assistance & Simulated Responses
     Route::get('/bookings/{requestId}/chat', [ChatController::class, 'index']);
