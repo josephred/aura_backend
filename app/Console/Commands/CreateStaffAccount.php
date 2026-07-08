@@ -35,7 +35,10 @@ class CreateStaffAccount extends Command
                 return self::FAILURE;
             }
             // Admin accounts live as hidden professional rows (not bookable)
-            $professional = Professional::firstOrNew(['id' => 'staff_' . Str::slug($this->option('name'))]);
+            $professional = Professional::where('email', $email)->first();
+            if (!$professional) {
+                $professional = Professional::firstOrNew(['id' => 'staff_' . Str::slug($this->option('name'))]);
+            }
             $professional->fill([
                 'name' => $this->option('name'),
                 'specialty' => 'Administración',

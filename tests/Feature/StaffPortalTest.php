@@ -175,6 +175,75 @@ class StaffPortalTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_accepting_a_booking_assigns_it_and_hides_it_from_others(): void
+    {
+        $this->makeProfessionalAccount('prof_a', 'a@aura.cl');
+        $this->makeProfessionalAccount('prof_b', 'b@aura.cl');
+        $this->makeProfessionalAccount('staff_admin', 'admin@aura.cl', 'admin', false);
+
+        $user = User::create([
+            'name' => 'Paciente Guardia',
+            'email' => 'guardia@aura.cl',
+            'password' => bcrypt('password123'),
+        ]);
+        \Illuminate\Support\Facades\DB::table('clinical_services')->insert([
+            'id' => 'medico',
+            'title' => 'Médico a domicilio',
+            'short_title' => 'Médico',
+            'subtitle' => 'Consulta general',
+            'description' => 'Servicio médico',
+            'base_price' => 25000,
+            'base_eta' => '30 min',
+            'requires_prescription' => false,
+            'icon_name' => 'medical_services',
+            'warning_info' => 'Ninguna',
+            'placeholder_text' => 'Ingrese síntomas',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \App\Models\ServiceRequest::create([
+            'id' => 'req_guardia',
+            'user_id' => $user->id,
+            'service_id' => 'medico',
+            'status' => 'pending_payment',
+            'patient_type' => 'self',
+            'address_text' => 'Calle 1',
+            'payment_method' => 'mercadopago',
+            'final_price' => 25000,
+            'start_time' => '10:00',
+            'eta_minutes' => 30,
+            'current_step' => 0,
+        ]);
+
+        // Unassigned: both professionals see it (guardia model)
+        $this->post('/doctor/login', ['email' => 'a@aura.cl', 'password' => 'clave-segura-123']);
+        $this->getJson('/doctor/api/bookings')->assertJsonCount(1);
+
+        // Professional A accepts -> request becomes theirs
+        $this->postJson('/doctor/api/bookings/req_guardia/status', ['status' => 'accepted'])
+            ->assertStatus(200);
+        $this->assertEquals('prof_a', \App\Models\ServiceRequest::find('req_guardia')->professional_id);
+
+        // A's replies are signed with their name
+        $this->postJson('/doctor/api/bookings/req_guardia/messages', ['text' => 'Voy en camino'])
+            ->assertStatus(201)
+            ->assertJsonPath('sender_name', 'Prof prof_a');
+
+        // Professional B no longer sees it, nor its chat
+        $this->post('/doctor/logout');
+        $this->post('/doctor/login', ['email' => 'b@aura.cl', 'password' => 'clave-segura-123']);
+        $this->getJson('/doctor/api/bookings')->assertJsonCount(0);
+        $this->getJson('/doctor/api/bookings/req_guardia/messages')->assertStatus(404);
+        $this->postJson('/doctor/api/bookings/req_guardia/status', ['status' => 'completed'])
+            ->assertStatus(404);
+
+        // Admin still sees and can operate on everything
+        $this->post('/doctor/logout');
+        $this->post('/doctor/login', ['email' => 'admin@aura.cl', 'password' => 'clave-segura-123']);
+        $this->getJson('/doctor/api/bookings')->assertJsonCount(1);
+        $this->getJson('/doctor/api/bookings/req_guardia/messages')->assertStatus(200);
+    }
+
     public function test_public_catalog_does_not_leak_credentials(): void
     {
         $this->makeProfessionalAccount('prof_a', 'a@aura.cl');

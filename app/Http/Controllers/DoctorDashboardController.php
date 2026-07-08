@@ -14,6 +14,8 @@ use Illuminate\Support\Str;
 
 class DoctorDashboardController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesStaffScope;
+
     /**
      * Display the doctor dashboard.
      */
@@ -23,11 +25,34 @@ class DoctorDashboardController extends Controller
     }
 
     /**
+     * Guardia visibility: professionals see unassigned requests (anyone
+     * must be able to take them) plus the ones assigned to themselves;
+     * admins see everything.
+     */
+    private function visibleBookings()
+    {
+        return ServiceRequest::query()->when(
+            $this->scopedProfessionalId(),
+            fn ($q, $pid) => $q->where(function ($sub) use ($pid) {
+                $sub->whereNull('professional_id')->orWhere('professional_id', $pid);
+            }),
+        );
+    }
+
+    /**
+     * Find a booking the logged-in staff member may operate on.
+     */
+    private function findVisibleBooking(string $id): ?ServiceRequest
+    {
+        return $this->visibleBookings()->where('id', $id)->first();
+    }
+
+    /**
      * Get all active and pending bookings for the dashboard.
      */
     public function bookings(): JsonResponse
     {
-        $bookings = ServiceRequest::orderBy('created_at', 'desc')->get()->map(function ($req) {
+        $bookings = $this->visibleBookings()->orderBy('created_at', 'desc')->get()->map(function ($req) {
             $service = ClinicalService::find($req->service_id);
             $user = User::find($req->user_id);
             $dependent = $req->dependent_id ? Dependent::find($req->dependent_id) : null;
@@ -36,6 +61,7 @@ class DoctorDashboardController extends Controller
                 'id' => $req->id,
                 'user_id' => $req->user_id,
                 'service_id' => $req->service_id,
+                'professional_id' => $req->professional_id,
                 'status' => $req->status,
                 'patient_type' => $req->patient_type,
                 'dependent_id' => $req->dependent_id,
@@ -67,9 +93,14 @@ class DoctorDashboardController extends Controller
             'status' => 'required|string|in:accepted,en_camino,en_atencion,completed,cancelled',
         ]);
 
-        $serviceRequest = ServiceRequest::find($id);
+        $serviceRequest = $this->findVisibleBooking($id);
         if (!$serviceRequest) {
             return response()->json(['error' => 'Reserva no encontrada'], 404);
+        }
+
+        // Acting on an unassigned request claims it for this professional
+        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
+            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
         }
 
         $nextStatus = $validated['status'];
@@ -199,6 +230,10 @@ class DoctorDashboardController extends Controller
      */
     public function getMessages(string $id): JsonResponse
     {
+        if (!$this->findVisibleBooking($id)) {
+            return response()->json(['error' => 'Reserva no encontrada'], 404);
+        }
+
         $messages = ChatMessage::where('service_request_id', $id)
             ->orderBy('created_at', 'asc')
             ->get();
@@ -215,18 +250,32 @@ class DoctorDashboardController extends Controller
             'text' => 'required|string|max:1000',
         ]);
 
-        $serviceRequest = ServiceRequest::find($id);
+        $serviceRequest = $this->findVisibleBooking($id);
         if (!$serviceRequest) {
             return response()->json(['error' => 'Reserva no encontrada'], 404);
+        }
+
+        // Replying to an unassigned request also claims it
+        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
+            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
         }
 
         $message = ChatMessage::create([
             'id' => 'web_msg_' . time() . '_' . rand(100, 999),
             'service_request_id' => $id,
             'sender' => 'provider',
+            'sender_name' => session('staff_name'),
             'text' => $validated['text'],
             'timestamp' => date('H:i'),
         ]);
+
+        $senderName = session('staff_name', 'Equipo clínico');
+        app(\App\Services\FcmService::class)->notifyUser(
+            $serviceRequest->user_id,
+            "Mensaje de $senderName",
+            $validated['text'],
+            ['booking_id' => $serviceRequest->id, 'type' => 'chat'],
+        );
 
         return response()->json($message, 201);
     }
