@@ -914,10 +914,14 @@
         <div class="doctor-profile">
             <a href="/doctor/agenda" style="color:#2DD4BF;text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">📅 Agenda de citas</a>
             <div class="profile-info">
-                <div class="profile-name">Dr. Sebastián Leyton</div>
-                <div class="profile-role">Médico General de Guardia</div>
+                <div class="profile-name">{{ session('staff_name', 'Equipo Aura') }}</div>
+                <div class="profile-role">{{ session('staff_role') === 'admin' ? 'Administración' : 'Profesional clínico' }}</div>
             </div>
-            <div class="profile-avatar">SL</div>
+            <div class="profile-avatar">{{ strtoupper(mb_substr(session('staff_name', 'EA'), 0, 1)) }}{{ strtoupper(mb_substr(strrchr(session('staff_name', 'E A'), ' ') ?: ' A', 1, 1)) }}</div>
+            <form method="POST" action="/doctor/logout" style="margin-left:14px;">
+                @csrf
+                <button type="submit" style="background:none;border:1px solid rgba(239,68,68,.35);color:#EF4444;cursor:pointer;font-size:12px;padding:6px 12px;border-radius:8px;">Salir</button>
+            </form>
         </div>
     </header>
 

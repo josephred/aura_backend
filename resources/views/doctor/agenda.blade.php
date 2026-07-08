@@ -65,8 +65,13 @@
 <body>
     <header>
         <div class="title">AURA <span>Agenda</span></div>
-        <nav>
+        <nav style="display:flex;align-items:center;gap:4px;">
+            <span style="color:#64748B;font-size:13px;">{{ $staffName }}{{ $staffRole === 'admin' ? ' · Admin' : '' }}</span>
             <a href="/doctor">← Volver al panel</a>
+            <form method="POST" action="/doctor/logout" style="display:inline;margin-left:20px;">
+                @csrf
+                <button type="submit" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:13px;padding:0;">Salir</button>
+            </form>
         </nav>
     </header>
     <main>
@@ -95,10 +100,22 @@
             <button class="primary" onclick="addBlock()">Agregar bloque</button>
         </div>
         <div id="schedule" class="schedule-chips"></div>
+
+        @if (($staffRole ?? '') === 'admin')
+        <h2>Cuentas del portal</h2>
+        <table>
+            <thead>
+                <tr><th>Profesional</th><th>Correo de acceso</th><th>Rol</th><th>Último acceso</th><th></th></tr>
+            </thead>
+            <tbody id="accounts"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+        </table>
+        @endif
     </main>
 
     <script>
         const csrf = '{{ csrf_token() }}';
+        const IS_ADMIN = @json(($staffRole ?? '') === 'admin');
+        const MY_PROFESSIONAL_ID = @json($staffProfessionalId ?? null);
         const DAYS = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
         const STATUS_ES = {
             confirmed: 'Confirmada', pending_payment: 'Pago pendiente',
@@ -152,11 +169,49 @@
         }
 
         async function loadProfessionals() {
-            const pros = await api('/api/professionals');
+            let pros = await api('/api/professionals');
             const select = document.getElementById('professional');
+            // Professionals only manage their own schedule
+            if (!IS_ADMIN && MY_PROFESSIONAL_ID) {
+                pros = pros.filter(p => p.id === MY_PROFESSIONAL_ID);
+                select.disabled = true;
+            }
             select.innerHTML = pros.map(p => `<option value="${p.id}">${p.name} — ${p.specialty}</option>`).join('');
             select.onchange = loadSchedule;
             if (pros.length) loadSchedule();
+        }
+
+        async function loadAccounts() {
+            if (!IS_ADMIN) return;
+            const rows = await api('/doctor/api/accounts');
+            document.getElementById('accounts').innerHTML = rows.map(a => {
+                const last = a.last_login_at
+                    ? new Date(a.last_login_at).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                    : 'Nunca';
+                return `<tr>
+                    <td>${a.name}<br><span style="color:#64748B;font-size:12px">${a.specialty}</span></td>
+                    <td><input type="email" id="email_${a.id}" value="${a.email ?? ''}" placeholder="correo@aura.cl" style="width:220px"></td>
+                    <td>${a.role === 'admin' ? '⭐ Admin' : 'Profesional'}</td>
+                    <td>${a.has_password ? last : '<span style="color:#F59E0B">Sin cuenta</span>'}</td>
+                    <td><button class="primary" style="font-size:12px;padding:6px 10px" onclick="saveAccount('${a.id}')">
+                        ${a.has_password ? 'Resetear clave' : 'Crear cuenta'}</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function saveAccount(id) {
+            const email = document.getElementById(`email_${id}`).value.trim();
+            if (!email) { alert('Ingresa un correo primero.'); return; }
+            const res = await api(`/doctor/api/professionals/${id}/account`, {
+                method: 'POST',
+                body: JSON.stringify({ email }),
+            });
+            if (res.generated_password) {
+                prompt('Cuenta lista. Copia y entrega esta contraseña (no se volverá a mostrar):', res.generated_password);
+            } else if (res.error ?? !res.success) {
+                alert(res.error ?? 'No se pudo guardar la cuenta.');
+            }
+            loadAccounts();
         }
 
         async function loadSchedule() {
@@ -189,6 +244,7 @@
 
         loadAppointments();
         loadProfessionals();
+        loadAccounts();
         setInterval(loadAppointments, 30000);
     </script>
 </body>

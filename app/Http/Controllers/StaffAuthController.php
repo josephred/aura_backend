@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Professional;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class StaffAuthController extends Controller
 {
@@ -20,24 +22,32 @@ class StaffAuthController extends Controller
     }
 
     /**
-     * Validate the portal access key and start a staff session.
+     * Authenticate a professional (or admin) account and start the session.
      */
     public function login(Request $request): RedirectResponse
     {
         $request->validate([
-            'access_key' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string',
         ]);
 
-        $configuredKey = config('services.doctor_portal.access_key');
+        $professional = Professional::where('email', $request->input('email'))->first();
 
-        if (empty($configuredKey) || !hash_equals($configuredKey, $request->input('access_key'))) {
+        if (!$professional
+            || empty($professional->password)
+            || !Hash::check($request->input('password'), $professional->password)) {
             return back()->withErrors([
-                'access_key' => 'Clave de acceso incorrecta.',
-            ]);
+                'email' => 'Credenciales incorrectas.',
+            ])->onlyInput('email');
         }
+
+        $professional->update(['last_login_at' => now()]);
 
         $request->session()->regenerate();
         $request->session()->put('staff_authenticated', true);
+        $request->session()->put('staff_professional_id', $professional->id);
+        $request->session()->put('staff_name', $professional->name);
+        $request->session()->put('staff_role', $professional->role ?? 'professional');
 
         return redirect('/doctor');
     }
@@ -47,7 +57,9 @@ class StaffAuthController extends Controller
      */
     public function logout(Request $request): RedirectResponse
     {
-        $request->session()->forget('staff_authenticated');
+        $request->session()->forget([
+            'staff_authenticated', 'staff_professional_id', 'staff_name', 'staff_role',
+        ]);
         $request->session()->regenerate();
 
         return redirect('/doctor/login');

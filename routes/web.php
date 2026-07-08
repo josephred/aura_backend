@@ -37,4 +37,8 @@ Route::middleware('staff.auth')->group(function () {
     Route::get('/doctor/api/professionals/{id}/schedules', [DoctorAgendaController::class, 'schedules']);
     Route::post('/doctor/api/professionals/{id}/schedules', [DoctorAgendaController::class, 'storeSchedule']);
     Route::delete('/doctor/api/professionals/{id}/schedules/{blockId}', [DoctorAgendaController::class, 'destroySchedule']);
+
+    // Portal account management (admin only, enforced in controller)
+    Route::get('/doctor/api/accounts', [DoctorAgendaController::class, 'accounts']);
+    Route::post('/doctor/api/professionals/{id}/account', [DoctorAgendaController::class, 'saveAccount']);
 });

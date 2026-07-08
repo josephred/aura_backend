@@ -18,16 +18,39 @@ class DoctorAgendaController extends Controller
      */
     public function index()
     {
-        return view('doctor.agenda');
+        return view('doctor.agenda', [
+            'staffName' => session('staff_name', 'Equipo Aura'),
+            'staffRole' => session('staff_role', 'professional'),
+            'staffProfessionalId' => session('staff_professional_id'),
+        ]);
     }
 
     /**
-     * Upcoming and recent appointments for the staff portal.
+     * True when the logged-in staff member manages every professional.
+     */
+    private function isAdmin(): bool
+    {
+        return session('staff_role') === 'admin';
+    }
+
+    /**
+     * The professional id the session is allowed to operate as, or null
+     * for admins (who can operate on everyone).
+     */
+    private function scopedProfessionalId(): ?string
+    {
+        return $this->isAdmin() ? null : session('staff_professional_id');
+    }
+
+    /**
+     * Upcoming and recent appointments for the staff portal. Professionals
+     * only see their own agenda; admins see everything.
      */
     public function appointments(): JsonResponse
     {
         $appointments = Appointment::with(['professional', 'user'])
             ->where('scheduled_at', '>=', now()->subDays(7))
+            ->when($this->scopedProfessionalId(), fn ($q, $id) => $q->where('professional_id', $id))
             ->orderBy('scheduled_at')
             ->limit(200)
             ->get()
@@ -68,7 +91,10 @@ class DoctorAgendaController extends Controller
             'status' => 'required|string|in:completed,no_show,cancelled',
         ]);
 
-        $appointment = Appointment::find($id);
+        $appointment = Appointment::when(
+                $this->scopedProfessionalId(),
+                fn ($q, $pid) => $q->where('professional_id', $pid),
+            )->find($id);
         if (!$appointment) {
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
@@ -92,7 +118,9 @@ class DoctorAgendaController extends Controller
      */
     public function callPage(string $id)
     {
-        $appointment = Appointment::with(['professional', 'user'])->find($id);
+        $appointment = Appointment::with(['professional', 'user'])
+            ->when($this->scopedProfessionalId(), fn ($q, $pid) => $q->where('professional_id', $pid))
+            ->find($id);
         abort_unless($appointment && $appointment->type === 'video', 404);
 
         $patient = $appointment->user?->name ?? 'Paciente';
@@ -114,7 +142,10 @@ class DoctorAgendaController extends Controller
      */
     public function webrtcConfig(string $id): JsonResponse
     {
-        $appointment = Appointment::find($id);
+        $appointment = Appointment::when(
+                $this->scopedProfessionalId(),
+                fn ($q, $pid) => $q->where('professional_id', $pid),
+            )->find($id);
         if (!$appointment || $appointment->type !== 'video') {
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
@@ -136,7 +167,10 @@ class DoctorAgendaController extends Controller
             'payload' => 'nullable',
         ]);
 
-        $appointment = Appointment::find($id);
+        $appointment = Appointment::when(
+                $this->scopedProfessionalId(),
+                fn ($q, $pid) => $q->where('professional_id', $pid),
+            )->find($id);
         if (!$appointment || $appointment->type !== 'video') {
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
@@ -157,10 +191,75 @@ class DoctorAgendaController extends Controller
     }
 
     /**
+     * Portal accounts overview (admin only).
+     */
+    public function accounts(): JsonResponse
+    {
+        if (!$this->isAdmin()) {
+            return response()->json(['error' => 'Solo administradores'], 403);
+        }
+
+        $accounts = \App\Models\Professional::orderBy('name')->get()->map(fn ($p) => [
+            'id' => $p->id,
+            'name' => $p->name,
+            'specialty' => $p->specialty,
+            'email' => $p->email,
+            'role' => $p->role ?? 'professional',
+            'has_password' => !empty($p->password),
+            'last_login_at' => $p->last_login_at?->toIso8601String(),
+        ]);
+
+        return response()->json($accounts);
+    }
+
+    /**
+     * Create or update a professional's portal account (admin only).
+     * Returns the generated password when none is provided.
+     */
+    public function saveAccount(Request $request, string $professionalId): JsonResponse
+    {
+        if (!$this->isAdmin()) {
+            return response()->json(['error' => 'Solo administradores'], 403);
+        }
+
+        $professional = \App\Models\Professional::find($professionalId);
+        if (!$professional) {
+            return response()->json(['error' => 'Profesional no encontrado'], 404);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email|unique:professionals,email,' . $professionalId,
+            'password' => 'nullable|string|min:8',
+        ]);
+
+        $generated = null;
+        $password = $validated['password'] ?? null;
+        if (empty($password)) {
+            $generated = \Illuminate\Support\Str::random(12);
+            $password = $generated;
+        }
+
+        $professional->update([
+            'email' => strtolower($validated['email']),
+            'password' => \Illuminate\Support\Facades\Hash::make($password),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'generated_password' => $generated,
+        ]);
+    }
+
+    /**
      * Signals sent by the patient, newer than the given id.
      */
     public function videoSignals(Request $request, string $id): JsonResponse
     {
+        $scoped = $this->scopedProfessionalId();
+        if ($scoped !== null && !Appointment::where('id', $id)->where('professional_id', $scoped)->exists()) {
+            return response()->json(['error' => 'Cita no encontrada'], 404);
+        }
+
         $after = (int) $request->query('after', 0);
 
         $signals = VideoSignal::where('appointment_id', $id)
@@ -178,10 +277,23 @@ class DoctorAgendaController extends Controller
     }
 
     /**
+     * Professionals may only manage their own weekly schedule.
+     */
+    private function deniesScheduleAccess(string $professionalId): bool
+    {
+        $scoped = $this->scopedProfessionalId();
+
+        return $scoped !== null && $scoped !== $professionalId;
+    }
+
+    /**
      * Weekly schedule blocks of a professional.
      */
     public function schedules(string $professionalId): JsonResponse
     {
+        if ($this->deniesScheduleAccess($professionalId)) {
+            return response()->json(['error' => 'Sin permiso sobre este profesional'], 403);
+        }
         $blocks = ProfessionalSchedule::where('professional_id', $professionalId)
             ->orderBy('day_of_week')
             ->orderBy('start_time')
@@ -195,6 +307,10 @@ class DoctorAgendaController extends Controller
      */
     public function storeSchedule(Request $request, string $professionalId): JsonResponse
     {
+        if ($this->deniesScheduleAccess($professionalId)) {
+            return response()->json(['error' => 'Sin permiso sobre este profesional'], 403);
+        }
+
         $validated = $request->validate([
             'day_of_week' => 'required|integer|between:1,7',
             'start_time' => 'required|date_format:H:i',
@@ -216,6 +332,10 @@ class DoctorAgendaController extends Controller
      */
     public function destroySchedule(string $professionalId, int $blockId): JsonResponse
     {
+        if ($this->deniesScheduleAccess($professionalId)) {
+            return response()->json(['error' => 'Sin permiso sobre este profesional'], 403);
+        }
+
         ProfessionalSchedule::where('professional_id', $professionalId)
             ->where('id', $blockId)
             ->delete();

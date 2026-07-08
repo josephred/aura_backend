@@ -11,8 +11,12 @@ class Professional extends Model
     protected $keyType = 'string';
     protected $guarded = [];
 
+    // Never expose account credentials through API serialization
+    protected $hidden = ['email', 'password', 'role', 'last_login_at'];
+
     protected $casts = [
         'active' => 'boolean',
+        'last_login_at' => 'datetime',
     ];
 
     public function schedules(): HasMany

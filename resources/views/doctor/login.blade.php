@@ -41,7 +41,7 @@
         h1 { font-size: 20px; font-weight: 800; text-align: center; letter-spacing: -0.4px; }
         p.sub { font-size: 12px; color: #64748B; text-align: center; margin: 6px 0 28px; }
         label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px; }
-        input[type="password"] {
+        input[type="password"], input[type="email"] {
             width: 100%;
             padding: 13px 16px;
             border-radius: 14px;
@@ -52,7 +52,8 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        input[type="password"]:focus { border-color: #2DD4BF; }
+        input[type="password"]:focus, input[type="email"]:focus { border-color: #2DD4BF; }
+        .field { margin-bottom: 18px; }
         .error {
             margin-top: 12px;
             padding: 10px 14px;
@@ -86,9 +87,15 @@
         <p class="sub">Acceso exclusivo para personal de salud autorizado</p>
         <form method="POST" action="/doctor/login">
             @csrf
-            <label for="access_key">Clave de acceso</label>
-            <input type="password" id="access_key" name="access_key" autofocus required autocomplete="current-password">
-            @error('access_key')
+            <div class="field">
+                <label for="email">Correo electrónico</label>
+                <input type="email" id="email" name="email" value="{{ old('email') }}" autofocus required autocomplete="username">
+            </div>
+            <div class="field">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            @error('email')
                 <div class="error">{{ $message }}</div>
             @enderror
             <button type="submit">Ingresar al panel</button>

@@ -124,8 +124,11 @@ class VideoConsultationTest extends TestCase
 
     public function test_signaling_roundtrip_between_staff_and_patient(): void
     {
-        config(['services.doctor_portal.access_key' => 'staff-key']);
         $this->makeProfessional();
+        Professional::where('id', 'prof_video')->update([
+            'email' => 'video@aura.cl',
+            'password' => bcrypt('clave-segura-123'),
+        ]);
         [$user, $token] = $this->makeUser();
         $appointment = $this->makeVideoAppointment($user, 'apt_call', now()->addMinutes(5));
 
@@ -138,7 +141,7 @@ class VideoConsultationTest extends TestCase
         ]);
 
         // Staff logs in and posts an offer: the old session is wiped
-        $this->post('/doctor/login', ['access_key' => 'staff-key']);
+        $this->post('/doctor/login', ['email' => 'video@aura.cl', 'password' => 'clave-segura-123']);
         $offerResponse = $this->postJson("/doctor/api/appointments/{$appointment->id}/video-signals", [
             'type' => 'offer',
             'payload' => ['sdp' => 'v=0 staff-offer'],
