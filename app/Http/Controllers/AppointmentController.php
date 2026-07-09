@@ -119,7 +119,13 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'Profesional no disponible'], 422);
         }
 
-        $scheduledAt = Carbon::parse($validated['scheduled_at'])->seconds(0);
+        // Normalize the incoming time to the app timezone. The app sends an
+        // absolute instant (UTC with offset); the tests send a naive local
+        // string. Converting to the app timezone makes both compare and store
+        // as the same Chilean wall-clock the schedule blocks are defined in.
+        $scheduledAt = Carbon::parse($validated['scheduled_at'])
+            ->setTimezone(config('app.timezone'))
+            ->seconds(0);
 
         if ($scheduledAt->isPast() || $scheduledAt->gt(now()->addDays(self::MAX_DAYS_AHEAD)->endOfDay())) {
             return response()->json(['error' => 'Fecha fuera del rango permitido'], 422);
