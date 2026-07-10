@@ -13,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust ngrok/reverse proxies so Laravel sees the request as HTTPS
+        // (X-Forwarded-Proto). Without this the doctor portal breaks behind
+        // the tunnel: wrong scheme in generated URLs, insecure session cookies.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'staff.auth' => \App\Http\Middleware\StaffAuth::class,
         ]);
