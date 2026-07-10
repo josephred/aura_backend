@@ -7,48 +7,97 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        (function () {
+            try {
+                if ((localStorage.getItem('aura_portal_theme') || 'dark') === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
+        :root {
+            --bg: #0B0F19;
+            --chrome-bg: #0B0F19;
+            --stage-bg: #05070D;
+            --border: rgba(255, 255, 255, 0.06);
+            --preview-border: rgba(255, 255, 255, 0.15);
+            --overlay-bg: rgba(11, 15, 25, 0.85);
+            --control-bg: rgba(255, 255, 255, 0.08);
+            --control-off: #475569;
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --accent: #0D9488;
+            --accent-light: #2DD4BF;
+            --spinner-track: rgba(45, 212, 191, 0.25);
+            --on-accent: #FFFFFF;
+            --danger: #EF4444;
+        }
+        :root[data-theme="light"] {
+            --bg: #EEF2F6;
+            --chrome-bg: #FFFFFF;
+            --stage-bg: #0B0F19;
+            --border: #E2E8F0;
+            --preview-border: rgba(15, 23, 42, 0.15);
+            --overlay-bg: rgba(238, 242, 246, 0.92);
+            --control-bg: #E2E8F0;
+            --control-off: #94A3B8;
+            --text-primary: #0F172A;
+            --text-secondary: #475569;
+            --accent-light: #0F766E;
+            --spinner-track: rgba(13, 148, 136, 0.2);
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background: #0B0F19; color: #F8FAFC; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background 0.3s ease, color 0.3s ease; }
         header {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0;
+            padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+            background: var(--chrome-bg);
         }
-        .title { font-size: 15px; font-weight: 700; }
-        .title span { color: #2DD4BF; }
-        .patient { font-size: 13px; color: #94A3B8; }
-        .stage { position: relative; flex: 1; background: #05070D; }
+        .title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+        .title span { color: var(--accent-light); }
+        .header-right { display: flex; align-items: center; gap: 14px; }
+        .patient { font-size: 13px; color: var(--text-secondary); }
+        .theme-toggle {
+            width: 38px; height: 38px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--control-bg);
+            color: var(--text-primary); font-size: 16px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
+        }
+        .theme-toggle:hover { border-color: var(--accent); }
+        .stage { position: relative; flex: 1; background: var(--stage-bg); }
         #remoteVideo { width: 100%; height: 100%; object-fit: contain; }
         #localVideo {
             position: absolute; bottom: 18px; right: 18px; width: 200px; aspect-ratio: 4/3;
-            object-fit: cover; border-radius: 12px; border: 1px solid rgba(255,255,255,.15);
+            object-fit: cover; border-radius: 12px; border: 1px solid var(--preview-border);
             background: #0B0F19; transform: scaleX(-1);
         }
         #status {
             position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
-            align-items: center; justify-content: center; background: rgba(11,15,25,.85);
-            font-size: 15px; color: #94A3B8; text-align: center; padding: 20px;
+            align-items: center; justify-content: center; background: var(--overlay-bg);
+            font-size: 15px; color: var(--text-secondary); text-align: center; padding: 20px;
         }
         #status.hidden { display: none; }
         .spinner {
             width: 34px; height: 34px; border-radius: 50%;
-            border: 3px solid rgba(45,212,191,.25); border-top-color: #2DD4BF;
+            border: 3px solid var(--spinner-track); border-top-color: var(--accent-light);
             animation: spin 1s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .controls {
             display: flex; justify-content: center; gap: 14px; padding: 14px; flex-shrink: 0;
-            border-top: 1px solid rgba(255,255,255,.06);
+            border-top: 1px solid var(--border); background: var(--chrome-bg);
         }
         .controls button {
             width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
-            font-size: 20px; background: rgba(255,255,255,.08); color: #F8FAFC;
+            font-size: 20px; background: var(--control-bg); color: var(--text-primary);
         }
-        .controls button.off { background: #475569; }
-        .controls button.hang { background: #EF4444; }
+        .controls button.off { background: var(--control-off); color: #FFFFFF; }
+        .controls button.hang { background: var(--danger); color: #FFFFFF; }
         .controls button:hover { filter: brightness(1.2); }
         #recall {
-            background: #0D9488; border: none; color: white; font-weight: 700;
+            background: var(--accent); border: none; color: var(--on-accent); font-weight: 700;
             padding: 11px 22px; border-radius: 10px; cursor: pointer; font-size: 14px;
         }
     </style>
@@ -56,7 +105,10 @@
 <body>
     <header>
         <div class="title">AURA <span>Videoconsulta</span></div>
-        <div class="patient">Paciente: {{ $patientName }} · {{ $appointment->scheduled_at->format('H:i') }} hrs</div>
+        <div class="header-right">
+            <div class="patient">Paciente: {{ $patientName }} · {{ $appointment->scheduled_at->format('H:i') }} hrs</div>
+            <button type="button" class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema">☀️</button>
+        </div>
     </header>
     <div class="stage">
         <video id="remoteVideo" autoplay playsinline></video>
@@ -77,6 +129,23 @@
         const APPOINTMENT_ID = @json($appointment->id);
         const CSRF = '{{ csrf_token() }}';
         const API = `/doctor/api/appointments/${APPOINTMENT_ID}`;
+
+        function updateThemeIcon() {
+            var light = document.documentElement.getAttribute('data-theme') === 'light';
+            document.getElementById('themeToggle').textContent = light ? '🌙' : '☀️';
+        }
+        function toggleTheme() {
+            var root = document.documentElement;
+            if (root.getAttribute('data-theme') === 'light') {
+                root.removeAttribute('data-theme');
+                try { localStorage.setItem('aura_portal_theme', 'dark'); } catch (e) {}
+            } else {
+                root.setAttribute('data-theme', 'light');
+                try { localStorage.setItem('aura_portal_theme', 'light'); } catch (e) {}
+            }
+            updateThemeIcon();
+        }
+        updateThemeIcon();
 
         let pc = null;
         let localStream = null;

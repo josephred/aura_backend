@@ -8,7 +8,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
+    <script>
+        (function () {
+            try {
+                if ((localStorage.getItem('aura_portal_theme') || 'dark') === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
         /* CSS Reset & Variables */
         * {
@@ -22,9 +30,28 @@
             --bg-color: #0B0F19;
             --primary-glow: rgba(13, 148, 136, 0.15);
             --secondary-glow: rgba(45, 212, 191, 0.15);
+            --header-bg: rgba(11, 15, 25, 0.7);
             --card-bg: rgba(255, 255, 255, 0.03);
             --card-border: rgba(255, 255, 255, 0.06);
             --card-border-hover: rgba(13, 148, 136, 0.4);
+            --surface: rgba(255, 255, 255, 0.03);
+            --surface-raised: rgba(255, 255, 255, 0.05);
+            --surface-sunken: rgba(255, 255, 255, 0.012);
+            --surface-hover: rgba(255, 255, 255, 0.08);
+            --border-strong: rgba(255, 255, 255, 0.1);
+            --input-bg: rgba(255, 255, 255, 0.03);
+            --heading-grad-a: #FFFFFF;
+            --heading-grad-b: #CBD5E1;
+            --on-accent: #FFFFFF;
+            --banner-grad-a: rgba(255, 255, 255, 0.02);
+            --banner-grad-b: rgba(255, 255, 255, 0.005);
+            --map-bg: #121824;
+            --map-grid-a: rgba(255, 255, 255, 0.04);
+            --map-grid-b: rgba(255, 255, 255, 0.02);
+            --map-route-track: rgba(255, 255, 255, 0.1);
+            --pin-ring: #FFFFFF;
+            --label-bg: rgba(11, 15, 25, 0.85);
+            --chat-time: rgba(255, 255, 255, 0.5);
             --text-primary: #F8FAFC;
             --text-secondary: #94A3B8;
             --accent-teal: #0D9488;
@@ -36,6 +63,37 @@
             --status-atencion: #EC4899;
             --status-completed: #10B981;
             --status-cancelled: #EF4444;
+        }
+
+        :root[data-theme="light"] {
+            --bg-color: #EEF2F6;
+            --primary-glow: rgba(13, 148, 136, 0.10);
+            --secondary-glow: rgba(45, 212, 191, 0.08);
+            --header-bg: rgba(255, 255, 255, 0.85);
+            --card-bg: #FFFFFF;
+            --card-border: #E2E8F0;
+            --card-border-hover: rgba(13, 148, 136, 0.45);
+            --surface: #FFFFFF;
+            --surface-raised: #F1F5F9;
+            --surface-sunken: #F8FAFC;
+            --surface-hover: #E2E8F0;
+            --border-strong: #CBD5E1;
+            --input-bg: #FFFFFF;
+            --heading-grad-a: #0F172A;
+            --heading-grad-b: #334155;
+            --banner-grad-a: #F8FAFC;
+            --banner-grad-b: #F1F5F9;
+            --map-bg: #E2E8F0;
+            --map-grid-a: rgba(15, 23, 42, 0.06);
+            --map-grid-b: rgba(15, 23, 42, 0.04);
+            --map-route-track: rgba(15, 23, 42, 0.15);
+            --pin-ring: #FFFFFF;
+            --label-bg: rgba(255, 255, 255, 0.92);
+            --chat-time: rgba(15, 23, 42, 0.45);
+            --text-primary: #0F172A;
+            --text-secondary: #64748B;
+            --accent-teal-light: #0F766E;
+            --status-completed: #059669;
         }
 
         body {
@@ -86,7 +144,7 @@
             height: 80px;
             border-bottom: 1px solid var(--card-border);
             backdrop-filter: blur(20px);
-            background-color: rgba(11, 15, 25, 0.7);
+            background-color: var(--header-bg);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -112,7 +170,7 @@
         }
 
         .logo-icon svg {
-            fill: white;
+            fill: var(--on-accent);
             width: 22px;
             height: 22px;
         }
@@ -121,7 +179,7 @@
             font-size: 20px;
             font-weight: 900;
             letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #FFF, #CBD5E1);
+            background: linear-gradient(135deg, var(--heading-grad-a), var(--heading-grad-b));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -169,7 +227,7 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            color: white;
+            color: var(--on-accent);
         }
 
         main {
@@ -179,7 +237,7 @@
             display: flex;
             flex-direction: column;
             gap: 24px;
-            max-width: 1600px;
+            max-width: 100%;
             margin: 0 auto;
             width: 100%;
         }
@@ -204,7 +262,7 @@
         }
 
         .stat-card:hover {
-            border-color: rgba(255, 255, 255, 0.12);
+            border-color: var(--border-strong);
             transform: translateY(-2px);
         }
 
@@ -296,7 +354,7 @@
 
         /* Booking Cards */
         .booking-card {
-            background-color: rgba(255, 255, 255, 0.015);
+            background-color: var(--surface-sunken);
             border: 1px solid var(--card-border);
             border-radius: 16px;
             padding: 16px;
@@ -307,8 +365,8 @@
         }
 
         .booking-card:hover {
-            background-color: rgba(255, 255, 255, 0.03);
-            border-color: rgba(255, 255, 255, 0.1);
+            background-color: var(--surface);
+            border-color: var(--border-strong);
             transform: translateX(4px);
         }
 
@@ -442,7 +500,7 @@
         }
 
         .patient-banner {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005));
+            background: linear-gradient(135deg, var(--banner-grad-a), var(--banner-grad-b));
             border: 1px solid var(--card-border);
             border-radius: 20px;
             padding: 20px;
@@ -500,7 +558,7 @@
 
         /* Timeline / Workflow status steps */
         .workflow-section {
-            background-color: rgba(255, 255, 255, 0.01);
+            background-color: var(--surface-sunken);
             border: 1px solid var(--card-border);
             border-radius: 20px;
             padding: 20px;
@@ -572,14 +630,14 @@
         .timeline-step.active .step-bubble {
             border-color: var(--accent-teal-light);
             background-color: var(--accent-teal);
-            color: white;
+            color: var(--on-accent);
             box-shadow: 0 0 10px rgba(13, 148, 136, 0.4);
         }
 
         .timeline-step.completed .step-bubble {
             border-color: var(--status-completed);
             background-color: var(--status-completed);
-            color: white;
+            color: var(--on-accent);
         }
 
         .step-label {
@@ -615,7 +673,7 @@
 
         .btn-primary {
             background: linear-gradient(135deg, var(--accent-teal), var(--accent-teal-light));
-            color: white;
+            color: var(--on-accent);
             box-shadow: 0 4px 15px rgba(13, 148, 136, 0.25);
         }
 
@@ -626,7 +684,7 @@
 
         .btn-success {
             background: linear-gradient(135deg, #10B981, #059669);
-            color: white;
+            color: var(--on-accent);
             box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
         }
 
@@ -636,13 +694,13 @@
         }
 
         .btn-secondary {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--surface-raised);
             border: 1px solid var(--card-border);
             color: var(--text-primary);
         }
 
         .btn-secondary:hover {
-            background-color: rgba(255, 255, 255, 0.08);
+            background-color: var(--surface-hover);
         }
 
         .btn:disabled {
@@ -654,7 +712,7 @@
 
         /* Map / Tracking Simulator */
         .map-section {
-            background-color: rgba(255, 255, 255, 0.01);
+            background-color: var(--surface-sunken);
             border: 1px solid var(--card-border);
             border-radius: 20px;
             padding: 20px;
@@ -667,9 +725,9 @@
 
         .map-canvas-simulator {
             flex: 1;
-            background-color: #121824;
+            background-color: var(--map-bg);
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--card-border);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -681,10 +739,10 @@
         .map-grid {
             position: absolute;
             inset: 0;
-            background-image: 
-                radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0),
-                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 0),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 0);
+            background-image:
+                radial-gradient(var(--map-grid-a) 1px, transparent 0),
+                linear-gradient(var(--map-grid-b) 1px, transparent 0),
+                linear-gradient(90deg, var(--map-grid-b) 1px, transparent 0);
             background-size: 20px 20px, 40px 40px, 40px 40px;
             z-index: 1;
         }
@@ -694,7 +752,7 @@
             position: absolute;
             width: 70%;
             height: 4px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--map-route-track);
             border-radius: 2px;
             z-index: 2;
         }
@@ -739,7 +797,7 @@
             width: 14px;
             height: 14px;
             border-radius: 50%;
-            border: 2px solid white;
+            border: 2px solid var(--pin-ring);
         }
 
         .map-pin-origin .pin-dot { background-color: var(--status-accepted); }
@@ -760,7 +818,7 @@
         .pin-label {
             font-size: 9px;
             font-weight: 700;
-            background-color: rgba(11, 15, 25, 0.85);
+            background-color: var(--label-bg);
             padding: 2px 6px;
             border-radius: 4px;
             border: 1px solid var(--card-border);
@@ -778,7 +836,7 @@
         .workspace-right {
             display: flex;
             flex-direction: column;
-            background-color: rgba(255, 255, 255, 0.005);
+            background-color: var(--surface-sunken);
             overflow: hidden;
         }
 
@@ -817,13 +875,13 @@
 
         .chat-bubble.provider {
             background: linear-gradient(135deg, var(--accent-teal-glow), var(--accent-teal));
-            color: white;
+            color: var(--on-accent);
             align-self: flex-end;
             border-bottom-right-radius: 4px;
         }
 
         .chat-bubble.patient {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--surface-raised);
             color: var(--text-primary);
             align-self: flex-start;
             border-bottom-left-radius: 4px;
@@ -831,7 +889,7 @@
         }
 
         .chat-bubble.system {
-            background-color: rgba(255, 255, 255, 0.02);
+            background-color: var(--surface-sunken);
             color: var(--text-secondary);
             align-self: center;
             text-align: center;
@@ -844,7 +902,7 @@
 
         .chat-time {
             font-size: 9px;
-            color: rgba(255, 255, 255, 0.5);
+            color: var(--chat-time);
             align-self: flex-end;
         }
 
@@ -858,11 +916,11 @@
         .chat-input {
             flex: 1;
             height: 40px;
-            background-color: rgba(255, 255, 255, 0.03);
+            background-color: var(--input-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
             padding: 0 14px;
-            color: white;
+            color: var(--text-primary);
             font-size: 12px;
             outline: none;
             transition: border-color 0.25s ease;
@@ -890,10 +948,26 @@
         }
 
         .chat-send-btn svg {
-            fill: white;
+            fill: var(--on-accent);
             width: 16px;
             height: 16px;
         }
+
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            background: var(--surface-raised);
+            color: var(--text-primary);
+            font-size: 17px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .theme-toggle:hover { border-color: var(--accent-teal); }
     </style>
 </head>
 <body>
@@ -912,7 +986,8 @@
             <div class="logo-badge">Portal Médico</div>
         </div>
         <div class="doctor-profile">
-            <a href="/doctor/agenda" style="color:#2DD4BF;text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">📅 Agenda de citas</a>
+            <button type="button" class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" style="margin-right:16px;">☀️</button>
+            <a href="/doctor/agenda" style="color:var(--accent-teal-light);text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">📅 Agenda de citas</a>
             <div class="profile-info">
                 <div class="profile-name">{{ session('staff_name', 'Equipo Aura') }}</div>
                 <div class="profile-role">{{ session('staff_role') === 'admin' ? 'Administración' : 'Profesional clínico' }}</div>
@@ -1096,6 +1171,24 @@
     </main>
 
     <script>
+        function updateThemeIcon() {
+            var light = document.documentElement.getAttribute('data-theme') === 'light';
+            var el = document.getElementById('themeToggle');
+            if (el) el.textContent = light ? '🌙' : '☀️';
+        }
+        function toggleTheme() {
+            var root = document.documentElement;
+            if (root.getAttribute('data-theme') === 'light') {
+                root.removeAttribute('data-theme');
+                try { localStorage.setItem('aura_portal_theme', 'dark'); } catch (e) {}
+            } else {
+                root.setAttribute('data-theme', 'light');
+                try { localStorage.setItem('aura_portal_theme', 'light'); } catch (e) {}
+            }
+            updateThemeIcon();
+        }
+        updateThemeIcon();
+
         let bookings = [];
         let selectedBookingId = null;
         let chatPollTimer = null;
