@@ -50,6 +50,9 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
         body { background: var(--bg); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background 0.3s ease, color 0.3s ease; }
+        /* Mobile browsers: 100vh includes the space behind the URL bar and
+           pushes the controls off screen; dvh tracks the visible viewport */
+        @supports (height: 100dvh) { body { height: 100dvh; } }
         header {
             display: flex; justify-content: space-between; align-items: center;
             padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
