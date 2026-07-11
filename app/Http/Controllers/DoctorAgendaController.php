@@ -10,6 +10,7 @@ use App\Services\FcmService;
 use App\Services\WebRtcService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class DoctorAgendaController extends Controller
 {
@@ -143,7 +144,8 @@ class DoctorAgendaController extends Controller
 
     /**
      * Push a WebRTC signal from the staff side. A new offer starts a fresh
-     * session and clears every previous signal of the appointment.
+     * session and clears previous STAFF signals only — patient signals
+     * (answer, candidates) are preserved to avoid a race condition.
      */
     public function postVideoSignal(Request $request, string $id): JsonResponse
     {
@@ -160,8 +162,13 @@ class DoctorAgendaController extends Controller
             return response()->json(['error' => 'Cita no encontrada'], 404);
         }
 
+        // Only wipe previous staff signals (old offer + old candidates).
+        // Patient signals are kept so we don't lose an answer that crossed
+        // the wire at the same time the doctor re-sent an offer.
         if ($validated['type'] === 'offer') {
-            VideoSignal::where('appointment_id', $appointment->id)->delete();
+            VideoSignal::where('appointment_id', $appointment->id)
+                ->where('sender', 'staff')
+                ->delete();
         }
 
         $payload = $validated['payload'] ?? null;
@@ -171,6 +178,8 @@ class DoctorAgendaController extends Controller
             'type' => $validated['type'],
             'payload' => is_string($payload) ? $payload : json_encode($payload),
         ]);
+
+        Log::info('VIDEO-SIGNAL staff', ['id' => $signal->id, 'apt' => $id, 'type' => $validated['type']]);
 
         return response()->json(['id' => $signal->id], 201);
     }

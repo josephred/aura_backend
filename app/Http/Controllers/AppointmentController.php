@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AppointmentController extends Controller
@@ -290,6 +291,8 @@ class AppointmentController extends Controller
             'type' => $validated['type'],
             'payload' => is_string($payload) ? $payload : json_encode($payload),
         ]);
+
+        Log::info('VIDEO-SIGNAL patient', ['id' => $signal->id, 'apt' => $id, 'type' => $validated['type']]);
 
         return response()->json(['id' => $signal->id], 201);
     }

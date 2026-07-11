@@ -156,6 +156,7 @@
         let queuedCandidates = [];
         let pollTimer = null;
         let ended = false;
+        let lastOfferSentAt = 0;
 
         const statusBox = document.getElementById('status');
         const statusText = document.getElementById('statusText');
@@ -239,6 +240,7 @@
             await pc.setLocalDescription(offer);
             // Posting an offer clears previous signals server-side: fresh session
             await sendSignal('offer', { sdp: offer.sdp });
+            lastOfferSentAt = Date.now();
             setStatus('Llamando al paciente…');
         }
 
@@ -253,8 +255,15 @@
                 lastSignalId = Math.max(lastSignalId, s.id);
 
                 if (s.type === 'ready') {
-                    // Patient (re)joined: start a fresh session
-                    await startOffer();
+                    // Patient (re)joined: start a fresh session, but only if
+                    // we haven't sent an offer very recently (avoid a
+                    // destructive offer/ready loop when signals overlap)
+                    const now = Date.now();
+                    if (now - lastOfferSentAt > 10000) {
+                        await startOffer();
+                    } else {
+                        console.log('Skipped re-offer: sent one', ((now - lastOfferSentAt)/1000).toFixed(1), 's ago');
+                    }
                 } else if (s.type === 'answer' && pc && pc.signalingState === 'have-local-offer') {
                     await pc.setRemoteDescription({ type: 'answer', sdp: s.payload.sdp });
                     for (const c of queuedCandidates) { try { await pc.addIceCandidate(c); } catch (e) {} }

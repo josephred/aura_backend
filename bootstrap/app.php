@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // the tunnel: wrong scheme in generated URLs, insecure session cookies.
         $middleware->trustProxies(at: '*');
 
+        // Temporary diagnostic: log every video-signal POST before auth runs
+        $middleware->append(\App\Http\Middleware\LogVideoSignals::class);
+
         $middleware->alias([
             'staff.auth' => \App\Http\Middleware\StaffAuth::class,
         ]);
