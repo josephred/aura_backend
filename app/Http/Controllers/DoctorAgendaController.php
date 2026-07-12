@@ -109,6 +109,9 @@ class DoctorAgendaController extends Controller
             ->find($id);
         abort_unless($appointment && $appointment->type === 'video', 404);
 
+        // Clean up any stale signals from previous attempts to ensure a clean start
+        VideoSignal::where('appointment_id', $id)->delete();
+
         $patient = $appointment->user?->name ?? 'Paciente';
         if ($appointment->dependent_id) {
             $dependent = Dependent::find($appointment->dependent_id);

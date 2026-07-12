@@ -279,7 +279,9 @@
             const config = await api(`${API}/webrtc-config`);
             window.iceServers = config.ice_servers ?? [];
 
-            await startOffer();
+            // Instead of starting the offer immediately (which expects the patient to be there),
+            // we show a "Waiting Room" state and wait for the patient to announce they are ready.
+            setStatus('Esperando a que el paciente se una a la videoconsulta…', { spinner: true });
             pollTimer = setInterval(poll, 900);
         }
 
