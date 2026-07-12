@@ -69,17 +69,53 @@
             display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
         }
         .theme-toggle:hover { border-color: var(--accent); }
-        .stage { position: relative; flex: 1; background: var(--stage-bg); }
+        .stage { position: relative; flex: 1; background: var(--stage-bg); overflow: hidden; }
         #remoteVideo { width: 100%; height: 100%; object-fit: contain; }
-        #localVideo {
+        
+        .local-video-container {
             position: absolute; bottom: 18px; right: 18px; width: 200px; aspect-ratio: 4/3;
-            object-fit: cover; border-radius: 12px; border: 1px solid var(--preview-border);
-            background: #0B0F19; transform: scaleX(-1);
+            border-radius: 12px; border: 1px solid var(--preview-border);
+            background: #0B0F19; overflow: hidden; z-index: 5;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         }
+        #localVideo {
+            width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);
+        }
+
+        .video-badge {
+            position: absolute;
+            background: rgba(11, 15, 25, 0.75);
+            backdrop-filter: blur(8px);
+            color: #FFFFFF;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 6;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            pointer-events: none;
+        }
+        .remote-badge {
+            bottom: 24px;
+            left: 24px;
+        }
+        .local-badge {
+            bottom: 8px;
+            left: 8px;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
         #status {
             position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
             align-items: center; justify-content: center; background: var(--overlay-bg);
             font-size: 15px; color: var(--text-secondary); text-align: center; padding: 20px;
+            z-index: 4;
         }
         #status.hidden { display: none; }
         .spinner {
@@ -88,17 +124,53 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
         .controls {
-            display: flex; justify-content: center; gap: 14px; padding: 14px; flex-shrink: 0;
-            border-top: 1px solid var(--border); background: var(--chrome-bg);
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            padding: 8px 16px;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border-radius: 100px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
         }
         .controls button {
-            width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
-            font-size: 20px; background: var(--control-bg); color: var(--text-primary);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
         }
-        .controls button.off { background: var(--control-off); color: #FFFFFF; }
-        .controls button.hang { background: var(--danger); color: #FFFFFF; }
-        .controls button:hover { filter: brightness(1.2); }
+        .controls button.off {
+            background: var(--danger);
+            color: #FFFFFF;
+        }
+        .controls button.hang {
+            background: var(--danger);
+            color: #FFFFFF;
+        }
+        .controls button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        .controls button.hang:hover {
+            background: #DC2626;
+        }
         #recall {
             background: var(--accent); border: none; color: var(--on-accent); font-weight: 700;
             padding: 11px 22px; border-radius: 10px; cursor: pointer; font-size: 14px;
@@ -115,17 +187,24 @@
     </header>
     <div class="stage">
         <video id="remoteVideo" autoplay playsinline></video>
-        <video id="localVideo" autoplay playsinline muted></video>
+        <div class="video-badge remote-badge" id="remoteBadge" style="display: none;">👤 {{ $patientName }}</div>
+
+        <div class="local-video-container">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <div class="video-badge local-badge">Dr/a. {{ $appointment->professional->name ?? 'Médico' }} (Tú)</div>
+        </div>
+
         <div id="status">
             <div class="spinner" id="statusSpinner"></div>
             <div id="statusText">Preparando cámara…</div>
             <button id="recall" style="display:none" onclick="startOffer()">Volver a llamar</button>
         </div>
-    </div>
-    <div class="controls">
-        <button id="micBtn" onclick="toggleMic()" title="Silenciar micrófono">🎙️</button>
-        <button id="camBtn" onclick="toggleCam()" title="Apagar cámara">🎥</button>
-        <button class="hang" onclick="hangUp()" title="Terminar llamada">📞</button>
+
+        <div class="controls">
+            <button id="micBtn" onclick="toggleMic()" title="Silenciar micrófono">🎙️</button>
+            <button id="camBtn" onclick="toggleCam()" title="Apagar cámara">🎥</button>
+            <button class="hang" onclick="hangUp()" title="Terminar llamada">📞</button>
+        </div>
     </div>
 
     <script>
@@ -207,6 +286,7 @@
         async function startOffer() {
             ended = false;
             queuedCandidates = [];
+            document.getElementById('remoteBadge').style.display = 'none';
             if (pc) { try { pc.close(); } catch (e) {} }
 
             pc = new RTCPeerConnection({ iceServers: window.iceServers });
@@ -225,14 +305,17 @@
                 if (e.streams.length) {
                     document.getElementById('remoteVideo').srcObject = e.streams[0];
                     setStatus('', { hidden: true });
+                    document.getElementById('remoteBadge').style.display = 'flex';
                 }
             };
             pc.onconnectionstatechange = () => {
                 if (ended) return;
                 if (pc.connectionState === 'connected') {
                     setStatus('', { hidden: true });
+                    document.getElementById('remoteBadge').style.display = 'flex';
                 } else if (['disconnected', 'failed'].includes(pc.connectionState)) {
                     setStatus('Conexión perdida. Esperando reconexión…');
+                    document.getElementById('remoteBadge').style.display = 'none';
                 }
             };
 
@@ -282,6 +365,7 @@
                 } else if (s.type === 'hangup') {
                     ended = true;
                     document.getElementById('remoteVideo').srcObject = null;
+                    document.getElementById('remoteBadge').style.display = 'none';
                     setStatus('El paciente finalizó la llamada.', { spinner: false, recall: true });
                 }
             }
@@ -291,14 +375,18 @@
             const track = localStream?.getAudioTracks()[0];
             if (!track) return;
             track.enabled = !track.enabled;
-            document.getElementById('micBtn').classList.toggle('off', !track.enabled);
+            const btn = document.getElementById('micBtn');
+            btn.classList.toggle('off', !track.enabled);
+            btn.textContent = track.enabled ? '🎙️' : '🔇';
         }
 
         function toggleCam() {
             const track = localStream?.getVideoTracks()[0];
             if (!track) return;
             track.enabled = !track.enabled;
-            document.getElementById('camBtn').classList.toggle('off', !track.enabled);
+            const btn = document.getElementById('camBtn');
+            btn.classList.toggle('off', !track.enabled);
+            btn.textContent = track.enabled ? '🎥' : '❌';
         }
 
         async function hangUp() {
