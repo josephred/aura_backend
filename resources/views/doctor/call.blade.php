@@ -265,7 +265,10 @@
                         console.log('Skipped re-offer: sent one', ((now - lastOfferSentAt)/1000).toFixed(1), 's ago');
                     }
                 } else if (s.type === 'answer' && pc && pc.signalingState === 'have-local-offer') {
-                    await pc.setRemoteDescription({ type: 'answer', sdp: s.payload.sdp });
+                    // Guarantee CRLF line endings and the trailing newline
+                    // the SDP parser expects
+                    let answerSdp = s.payload.sdp.replace(/\r\n/g, '\n').trim().replace(/\n/g, '\r\n') + '\r\n';
+                    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
                     for (const c of queuedCandidates) { try { await pc.addIceCandidate(c); } catch (e) {} }
                     queuedCandidates = [];
                     setStatus('Conectando video…');

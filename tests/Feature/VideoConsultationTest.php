@@ -132,22 +132,31 @@ class VideoConsultationTest extends TestCase
         [$user, $token] = $this->makeUser();
         $appointment = $this->makeVideoAppointment($user, 'apt_call', now()->addMinutes(5));
 
-        // A leftover signal from an older session
+        // Leftover signals from an older session, from both senders
         VideoSignal::create([
             'appointment_id' => $appointment->id,
             'sender' => 'patient',
             'type' => 'candidate',
-            'payload' => '{"candidate":"stale"}',
+            'payload' => '{"candidate":"stale-patient"}',
+        ]);
+        VideoSignal::create([
+            'appointment_id' => $appointment->id,
+            'sender' => 'staff',
+            'type' => 'candidate',
+            'payload' => '{"candidate":"stale-staff"}',
         ]);
 
-        // Staff logs in and posts an offer: the old session is wiped
+        // Staff posts a fresh offer: only previous STAFF signals are wiped —
+        // patient signals survive so an in-flight answer is never destroyed
         $this->post('/doctor/login', ['email' => 'video@aura.cl', 'password' => 'clave-segura-123']);
         $offerResponse = $this->postJson("/doctor/api/appointments/{$appointment->id}/video-signals", [
             'type' => 'offer',
             'payload' => ['sdp' => 'v=0 staff-offer'],
         ]);
         $offerResponse->assertStatus(201);
-        $this->assertEquals(1, VideoSignal::where('appointment_id', $appointment->id)->count());
+        $this->assertEquals(0, VideoSignal::where('appointment_id', $appointment->id)
+            ->where('sender', 'staff')->where('type', 'candidate')->count());
+        $this->assertEquals(2, VideoSignal::where('appointment_id', $appointment->id)->count());
 
         // Patient polls and receives only the staff offer
         $signals = $this->withToken($token)
@@ -195,6 +204,45 @@ class VideoConsultationTest extends TestCase
         $this->withToken($tokenB)
             ->getJson("/api/appointments/{$appointment->id}/video-signals")
             ->assertStatus(404);
+    }
+
+    public function test_sdp_payload_keeps_trailing_crlf(): void
+    {
+        config(['services.doctor_portal.access_key' => 'staff-key']);
+        $this->makeProfessional();
+        Professional::where('id', 'prof_video')->update([
+            'email' => 'video@aura.cl',
+            'password' => bcrypt('clave-segura-123'),
+        ]);
+        [$user, $token] = $this->makeUser();
+        $appointment = $this->makeVideoAppointment($user, 'apt_sdp', now()->addMinutes(5));
+
+        // A real SDP always ends with CRLF; the native Android parser
+        // rejects it if the global TrimStrings middleware strips it
+        $sdp = "v=0\r\no=- 123 2 IN IP4 127.0.0.1\r\ns=-\r\n";
+
+        // Staff offer keeps its trailing newline end-to-end
+        $this->post('/doctor/login', ['email' => 'video@aura.cl', 'password' => 'clave-segura-123']);
+        $this->postJson("/doctor/api/appointments/{$appointment->id}/video-signals", [
+            'type' => 'offer',
+            'payload' => ['sdp' => $sdp],
+        ])->assertStatus(201);
+
+        $received = $this->withToken($token)
+            ->getJson("/api/appointments/{$appointment->id}/video-signals?after=0")
+            ->json('signals.0.payload.sdp');
+        $this->assertSame($sdp, $received, 'staff offer SDP must arrive intact');
+        $this->assertStringEndsWith("\r\n", $received);
+
+        // Patient answer too
+        $this->withToken($token)->postJson("/api/appointments/{$appointment->id}/video-signals", [
+            'type' => 'answer',
+            'payload' => ['sdp' => $sdp],
+        ])->assertStatus(201);
+
+        $answer = VideoSignal::where('appointment_id', $appointment->id)
+            ->where('type', 'answer')->first();
+        $this->assertStringEndsWith("\r\n", json_decode($answer->payload, true)['sdp']);
     }
 
     public function test_repeated_ready_signals_are_deduplicated(): void

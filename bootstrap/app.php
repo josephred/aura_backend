@@ -18,6 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // the tunnel: wrong scheme in generated URLs, insecure session cookies.
         $middleware->trustProxies(at: '*');
 
+        // WebRTC session descriptions MUST keep their trailing CRLF: the
+        // native Android SDP parser rejects a description whose last line
+        // is unterminated ("SessionDescription is NULL"). Laravel's global
+        // TrimStrings middleware was silently stripping it.
+        $middleware->trimStrings(except: ['payload.sdp']);
+
         // Temporary diagnostic: log every video-signal POST before auth runs
         $middleware->append(\App\Http\Middleware\LogVideoSignals::class);
 

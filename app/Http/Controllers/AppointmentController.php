@@ -264,7 +264,9 @@ class AppointmentController extends Controller
     public function postVideoSignal(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'type' => 'required|string|in:offer,answer,candidate,ready,hangup',
+            // 'error' lets the app report client-side WebRTC failures so
+            // they can be diagnosed from the server without adb
+            'type' => 'required|string|in:offer,answer,candidate,ready,hangup,error',
             'payload' => 'nullable',
         ]);
 
