@@ -1075,6 +1075,7 @@
                                 <div class="banner-details">
                                     <span id="patient-address">📍 Dirección</span>
                                     <span id="patient-symptoms">📝 Síntomas</span>
+                                    <a id="patient-prescription" href="#" target="_blank" rel="noopener" style="display:none; color:#0D9488; font-weight:600; text-decoration:underline;">📎 Ver orden médica</a>
                                 </div>
                             </div>
                             <div class="banner-price">
@@ -1302,6 +1303,18 @@
             document.getElementById('patient-display-name').textContent = displayName;
             document.getElementById('patient-address').textContent = '📍 ' + b.address_text;
             document.getElementById('patient-symptoms').textContent = '📝 Sintomas: ' + (b.symptoms_description || 'Sin comentarios adicionales');
+
+            // Uploaded medical prescription (only render real server-hosted files)
+            const rxLink = document.getElementById('patient-prescription');
+            const rxUrl = b.prescription_file || b.prescription_preview;
+            if (rxUrl && /^https?:\/\//.test(rxUrl)) {
+                rxLink.href = rxUrl;
+                rxLink.textContent = '📎 ' + (b.prescription_name || 'Ver orden médica');
+                rxLink.style.display = 'inline-flex';
+            } else {
+                rxLink.style.display = 'none';
+            }
+
             document.getElementById('patient-price').textContent = '$' + b.final_price.toLocaleString('es-CL');
 
             // Timeline steps update

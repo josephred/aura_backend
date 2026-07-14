@@ -11,6 +11,7 @@ use App\Services\FcmService;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 
 class BookingController extends Controller
 {
@@ -42,11 +43,20 @@ class BookingController extends Controller
             'symptoms_description' => 'nullable|string',
             'prescription_name' => 'nullable|string',
             'prescription_preview' => 'nullable|string',
-            'prescription_file' => 'nullable|string',
+            'prescription_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
             'exam_required' => 'nullable|string',
             'final_price' => 'required|integer',
             'eta_minutes' => 'required|integer',
         ]);
+
+        // Persist the real prescription upload (multipart) and expose a public
+        // URL. When no file is attached (JSON booking) this stays null and the
+        // legacy `prescription_preview` string is kept for backward compat.
+        $prescriptionFileUrl = null;
+        if ($request->hasFile('prescription_file')) {
+            $storedPath = $request->file('prescription_file')->store('prescriptions', 'public');
+            $prescriptionFileUrl = Storage::disk('public')->url($storedPath);
+        }
 
         // Cancel any existing active request
         ServiceRequest::where('user_id', auth()->id())
@@ -69,8 +79,10 @@ class BookingController extends Controller
             'ambulance_type' => $validated['ambulance_type'] ?? null,
             'symptoms_description' => $validated['symptoms_description'] ?? null,
             'prescription_name' => $validated['prescription_name'] ?? null,
-            'prescription_preview' => $validated['prescription_preview'] ?? null,
-            'prescription_file' => $validated['prescription_file'] ?? null,
+            // Point the preview at the stored public URL when a file was
+            // uploaded so the app and the doctor portal can render it.
+            'prescription_preview' => $prescriptionFileUrl ?? ($validated['prescription_preview'] ?? null),
+            'prescription_file' => $prescriptionFileUrl,
             'exam_required' => $validated['exam_required'] ?? null,
             'payment_method' => 'mercadopago',
             'final_price' => $validated['final_price'],
