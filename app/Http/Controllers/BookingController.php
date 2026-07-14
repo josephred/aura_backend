@@ -40,6 +40,8 @@ class BookingController extends Controller
             'origin_address' => 'nullable|string',
             'destination_address' => 'nullable|string',
             'ambulance_type' => 'nullable|string',
+            'patient_lat' => 'nullable|numeric',
+            'patient_lng' => 'nullable|numeric',
             'symptoms_description' => 'nullable|string',
             'prescription_name' => 'nullable|string',
             'prescription_preview' => 'nullable|string',
@@ -77,6 +79,8 @@ class BookingController extends Controller
             'origin_address' => $validated['origin_address'] ?? null,
             'destination_address' => $validated['destination_address'] ?? null,
             'ambulance_type' => $validated['ambulance_type'] ?? null,
+            'patient_lat' => $validated['patient_lat'] ?? null,
+            'patient_lng' => $validated['patient_lng'] ?? null,
             'symptoms_description' => $validated['symptoms_description'] ?? null,
             'prescription_name' => $validated['prescription_name'] ?? null,
             // Point the preview at the stored public URL when a file was
@@ -381,6 +385,7 @@ class BookingController extends Controller
             $lastStatus = null;
             $lastStep = null;
             $lastMessageCount = null;
+            $lastLocation = null;
 
             // Loop for up to 50 seconds to avoid exceeding webserver timeout limits
             $elapsed = 0;
@@ -399,10 +404,15 @@ class BookingController extends Controller
                     ->get();
                 $messageCount = $messages->count();
 
-                if ($serviceRequest->status !== $lastStatus || $serviceRequest->current_step !== $lastStep || $messageCount !== $lastMessageCount) {
+                // Track the professional's live position so movement alone
+                // (without a status/step change) still pushes an SSE update.
+                $location = $serviceRequest->professional_lat . ',' . $serviceRequest->professional_lng;
+
+                if ($serviceRequest->status !== $lastStatus || $serviceRequest->current_step !== $lastStep || $messageCount !== $lastMessageCount || $location !== $lastLocation) {
                     $lastStatus = $serviceRequest->status;
                     $lastStep = $serviceRequest->current_step;
                     $lastMessageCount = $messageCount;
+                    $lastLocation = $location;
 
                     // Send payload
                     echo "data: " . json_encode([

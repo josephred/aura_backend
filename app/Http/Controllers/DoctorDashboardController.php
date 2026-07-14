@@ -229,6 +229,36 @@ class DoctorDashboardController extends Controller
     }
 
     /**
+     * Receive the assigned professional's live GPS position and store it on the
+     * booking so the patient app can track the approach in real time.
+     */
+    public function updateLocation(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'lat' => 'required|numeric|between:-90,90',
+            'lng' => 'required|numeric|between:-180,180',
+        ]);
+
+        $serviceRequest = $this->findVisibleBooking($id);
+        if (!$serviceRequest) {
+            return response()->json(['error' => 'Reserva no encontrada'], 404);
+        }
+
+        // Broadcasting a position also claims an unassigned request
+        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
+            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
+        }
+
+        $serviceRequest->update([
+            'professional_lat' => $validated['lat'],
+            'professional_lng' => $validated['lng'],
+            'professional_location_updated_at' => now(),
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
      * Get chat messages for a specific booking.
      */
     public function getMessages(string $id): JsonResponse

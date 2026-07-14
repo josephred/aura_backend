@@ -23,6 +23,7 @@ Route::middleware('staff.auth')->group(function () {
     Route::get('/doctor', [DoctorDashboardController::class, 'index']);
     Route::get('/doctor/api/bookings', [DoctorDashboardController::class, 'bookings']);
     Route::post('/doctor/api/bookings/{id}/status', [DoctorDashboardController::class, 'updateStatus']);
+    Route::post('/doctor/api/bookings/{id}/location', [DoctorDashboardController::class, 'updateLocation']);
     Route::get('/doctor/api/bookings/{id}/messages', [DoctorDashboardController::class, 'getMessages']);
     Route::post('/doctor/api/bookings/{id}/messages', [DoctorDashboardController::class, 'sendMessage']);
 

@@ -1194,6 +1194,8 @@
         let selectedBookingId = null;
         let chatPollTimer = null;
         let mapSimInterval = null;
+        let locationWatchId = null;
+        let lastLocationPostAt = 0;
 
         // Auto Refresh bookings every 4 seconds
         setInterval(fetchBookings, 4000);
@@ -1290,6 +1292,52 @@
             clearInterval(chatPollTimer);
             fetchChatMessages();
             chatPollTimer = setInterval(fetchChatMessages, 2000);
+
+            // Broadcast this professional's real GPS to the patient app
+            startLocationBroadcast(id);
+        }
+
+        // Streams the staff member's real device location to the selected
+        // booking so the patient sees the professional approaching in real time.
+        function startLocationBroadcast(bookingId) {
+            stopLocationBroadcast();
+
+            if (!('geolocation' in navigator)) {
+                console.warn('Geolocation no disponible en este navegador.');
+                return;
+            }
+
+            locationWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    // Only broadcast while the booking is still selected and active
+                    if (bookingId !== selectedBookingId) return;
+                    const b = bookings.find(x => x.id === bookingId);
+                    if (b && ['completed', 'cancelled', 'pending', 'pending_payment'].includes(b.status)) return;
+
+                    // Throttle to at most one post every 4 seconds
+                    const now = Date.now();
+                    if (now - lastLocationPostAt < 4000) return;
+                    lastLocationPostAt = now;
+
+                    fetch(`/doctor/api/bookings/${bookingId}/location`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+                    }).catch(err => console.error('Error enviando ubicación:', err));
+                },
+                (err) => console.warn('No se pudo obtener la ubicación GPS:', err.message),
+                { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+            );
+        }
+
+        function stopLocationBroadcast() {
+            if (locationWatchId !== null) {
+                navigator.geolocation.clearWatch(locationWatchId);
+                locationWatchId = null;
+            }
         }
 
         function updateDetailWorkspace(b) {
