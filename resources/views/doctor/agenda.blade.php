@@ -775,28 +775,15 @@
             </div>
         </div>
 
-        <!-- Section Admin Cuentas -->
+        <!-- Portal accounts and dispatch administration now live in the
+             independent operations panel at /admin. -->
         @if (($staffRole ?? '') === 'admin')
         <div class="section-block">
-            <h2>🔑 Cuentas de Acceso del Portal</h2>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Profesional</th>
-                            <th>Correo de Acceso</th>
-                            <th>Rol</th>
-                            <th>Último Acceso</th>
-                            <th style="width: 160px; text-align: right;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accounts">
-                        <tr>
-                            <td colspan="5" class="empty" style="text-align: center; color: var(--text-secondary);">Cargando cuentas…</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <h2>⚙️ Administración</h2>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
+                La gestión de cuentas, turnos y zonas se administra en el panel de operaciones, separado del área clínica.
+            </p>
+            <a href="/admin" class="btn btn-primary" style="display:inline-block; text-decoration:none;">Ir al panel de operaciones</a>
         </div>
         @endif
     </main>
@@ -929,39 +916,6 @@
             if (pros.length) loadSchedule();
         }
 
-        async function loadAccounts() {
-            if (!IS_ADMIN) return;
-            const rows = await api('/doctor/api/accounts');
-            document.getElementById('accounts').innerHTML = rows.map(a => {
-                const last = a.last_login_at
-                    ? new Date(a.last_login_at).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                    : 'Nunca';
-                return `<tr>
-                    <td><strong>${a.name}</strong><br><span style="color:var(--text-secondary);font-size:12px">${a.specialty}</span></td>
-                    <td><input type="email" id="email_${a.id}" value="${a.email ?? ''}" placeholder="correo@aura.cl"></td>
-                    <td><span class="admin-star">${a.role === 'admin' ? '⭐ Admin' : 'Profesional'}</span></td>
-                    <td>${a.has_password ? last : '<span style="color:var(--status-pending);font-weight:600;">Sin cuenta</span>'}</td>
-                    <td style="text-align: right;"><button class="btn btn-primary" style="font-size:12px;padding:6px 12px;" onclick="saveAccount('${a.id}')">
-                        ${a.has_password ? 'Resetear clave' : 'Crear cuenta'}</button></td>
-                </tr>`;
-            }).join('');
-        }
-
-        async function saveAccount(id) {
-            const email = document.getElementById(`email_${id}`).value.trim();
-            if (!email) { alert('Ingresa un correo primero.'); return; }
-            const res = await api(`/doctor/api/professionals/${id}/account`, {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-            });
-            if (res.generated_password) {
-                prompt('Cuenta lista. Copia y entrega esta contraseña (no se volverá a mostrar):', res.generated_password);
-            } else if (res.error ?? !res.success) {
-                alert(res.error ?? 'No se pudo guardar la cuenta.');
-            }
-            loadAccounts();
-        }
-
         async function loadSchedule() {
             const id = document.getElementById('professional').value;
             const blocks = await api(`/doctor/api/professionals/${id}/schedules`);
@@ -992,7 +946,6 @@
 
         loadAppointments();
         loadProfessionals();
-        loadAccounts();
         setInterval(loadAppointments, 30000);
     </script>
 </body>

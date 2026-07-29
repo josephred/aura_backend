@@ -114,7 +114,8 @@ class AuraTest extends TestCase
     }
 
     /**
-     * Test booking full lifecycle: create, simulate step, history, and cancel.
+     * Test booking full lifecycle: create, advance from the portal,
+     * history, and cancel.
      */
     public function test_booking_lifecycle_and_cancellation(): void
     {
@@ -159,20 +160,42 @@ class AuraTest extends TestCase
                          ->getJson('/api/bookings/active');
         $response->assertStatus(200)->assertJsonPath('status', 'accepted');
 
-        // 2. Advance booking (Simulate step 1 -> step 2)
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-                         ->postJson("/api/bookings/{$bookingId}/simulate-step");
-        $response->assertStatus(200)->assertJsonPath('current_step', 2)->assertJsonPath('status', 'en_camino');
+        // 2-4. The lifecycle is driven by the professional from the portal.
+        // There is no patient-facing endpoint to advance a request: the patient
+        // must not be able to mark their own care as completed.
+        $professional = \App\Models\Professional::create([
+            'id' => 'prof_test_flow',
+            'name' => 'Dra. Prueba',
+            'specialty' => 'Medicina General',
+            'consultation_price' => 20000,
+            'consultation_duration_minutes' => 30,
+            'active' => true,
+            'email' => 'flow@aura.cl',
+            'password' => bcrypt('clave-segura-123'),
+            'role' => 'professional',
+        ]);
 
-        // 3. Advance booking (Simulate step 2 -> step 3)
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-                         ->postJson("/api/bookings/{$bookingId}/simulate-step");
-        $response->assertStatus(200)->assertJsonPath('current_step', 3)->assertJsonPath('status', 'en_atencion');
+        $this->post('/doctor/login', [
+            'email' => 'flow@aura.cl',
+            'password' => 'clave-segura-123',
+        ])->assertRedirect('/doctor');
 
-        // 4. Advance booking (Simulate step 3 -> step 4 / complete)
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-                         ->postJson("/api/bookings/{$bookingId}/simulate-step");
-        $response->assertStatus(200)->assertJsonPath('current_step', 4)->assertJsonPath('status', 'completed');
+        foreach ([['en_camino', 2], ['en_atencion', 3], ['completed', 4]] as [$status, $step]) {
+            $this->postJson("/doctor/api/bookings/{$bookingId}/status", ['status' => $status])
+                 ->assertStatus(200);
+
+            $this->assertSame($status, \App\Models\ServiceRequest::find($bookingId)->status);
+            $this->assertSame($step, \App\Models\ServiceRequest::find($bookingId)->current_step);
+        }
+
+        // The history must name the professional who actually attended,
+        // not a random pick from a hardcoded list.
+        $record = \App\Models\PastService::where('user_id', $user->id)->latest('created_at')->first();
+        $this->assertNotNull($record);
+        $this->assertSame('prof_test_flow', $record->professional_id);
+        $this->assertStringContainsString('Dra. Prueba', $record->professional);
+
+        $this->post('/doctor/logout');
 
         // Check active booking -> should be null
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])

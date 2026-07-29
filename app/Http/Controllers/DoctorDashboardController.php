@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\ServiceRequest;
 use App\Models\ClinicalService;
+use App\Models\Professional;
 use App\Models\User;
 use App\Models\Dependent;
 use App\Models\ChatMessage;
 use App\Models\PastService;
+use App\Services\DispatchZoneService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
@@ -48,16 +50,121 @@ class DoctorDashboardController extends Controller
     }
 
     /**
+     * Acting on an unassigned request claims it for the acting professional.
+     * Admins coordinate but never take the visit themselves.
+     */
+    private function claimIfUnassigned(ServiceRequest $serviceRequest): void
+    {
+        $professionalId = $this->scopedProfessionalId();
+
+        if (empty($serviceRequest->professional_id) && $professionalId && !$this->isAdmin()) {
+            $serviceRequest->update(['professional_id' => $professionalId]);
+        }
+    }
+
+    /**
+     * A professional carrying a live visit is 'ocupado'; otherwise back to
+     * 'disponible'. Never touches someone who logged off ('desconectado').
+     */
+    private function syncDutyStatus(?string $professionalId): void
+    {
+        if (!$professionalId) {
+            return;
+        }
+
+        $professional = Professional::find($professionalId);
+        if (!$professional || $professional->duty_status === 'desconectado') {
+            return;
+        }
+
+        $busy = ServiceRequest::where('professional_id', $professionalId)
+            ->whereIn('status', ['accepted', 'en_camino', 'en_atencion'])
+            ->exists();
+
+        $next = $busy ? 'ocupado' : 'disponible';
+        if ($professional->duty_status !== $next) {
+            $professional->update(['duty_status' => $next]);
+        }
+    }
+
+    /**
+     * Writes the clinical history entry for a completed visit.
+     *
+     * Records the professional who actually attended — taken from the request's
+     * assignment, falling back to the staff member closing it. Previously this
+     * picked a name at random from a hardcoded list, and wrote to columns that
+     * do not exist in `past_services`, so completing a visit failed outright.
+     */
+    private function recordCompletedCare(ServiceRequest $serviceRequest): void
+    {
+        $service = ClinicalService::find($serviceRequest->service_id);
+        $serviceTitle = $service ? $service->title : 'Atención Médica';
+
+        $patientName = 'Usuario Principal';
+        if ($serviceRequest->patient_type === 'dependent' && $serviceRequest->dependent_id) {
+            $dependent = Dependent::find($serviceRequest->dependent_id);
+            if ($dependent) {
+                $patientName = "{$dependent->name} ({$dependent->relationship})";
+            }
+        }
+
+        $professionalId = $serviceRequest->professional_id ?: $this->scopedProfessionalId();
+        $professional = $professionalId ? Professional::find($professionalId) : null;
+
+        $professionalName = $professional
+            ? trim($professional->name . ($professional->specialty ? " ({$professional->specialty})" : ''))
+            : ($this->staffDisplayName() ?: 'Personal Clínico de Aura');
+
+        $months = [
+            'January' => 'Enero', 'February' => 'Febrero', 'March' => 'Marzo',
+            'April' => 'Abril', 'May' => 'Mayo', 'June' => 'Junio',
+            'July' => 'Julio', 'August' => 'Agosto', 'September' => 'Septiembre',
+            'October' => 'Octubre', 'November' => 'Noviembre', 'December' => 'Diciembre',
+        ];
+        $monthEn = date('F');
+        $dateFormatted = date('d \d\e ') . ($months[$monthEn] ?? $monthEn) . date(' Y');
+
+        PastService::create([
+            'id' => 'past_' . time() . '_' . Str::random(4),
+            'user_id' => $serviceRequest->user_id,
+            'service_id' => $serviceRequest->service_id,
+            'service_title' => $serviceTitle,
+            'date' => $dateFormatted,
+            'patient' => $patientName,
+            'price' => $serviceRequest->final_price,
+            'status' => 'completed',
+            // Placeholder until the professional writes the clinical note from
+            // the portal. It states what happened, it does not invent findings.
+            'details' => "Atención de $serviceTitle realizada en domicilio. "
+                . 'Resumen clínico pendiente de registro por el profesional.',
+            // Snapshot of the display name, plus the durable link.
+            'professional' => $professionalName,
+            'professional_id' => $professionalId,
+        ]);
+    }
+
+    /**
      * Get all active and pending bookings for the dashboard.
      */
     public function bookings(): JsonResponse
     {
-        $bookings = $this->visibleBookings()->orderBy('created_at', 'desc')->get()->map(function ($req) {
+        // Requests are dispatched per zone: the ones inside the professional's
+        // coverage come first. The rest are still returned (flagged
+        // `outside_zone`) so a request in an uncovered comuna is never orphaned.
+        $scopedId = $this->scopedProfessionalId();
+        $professional = $scopedId ? Professional::find($scopedId) : null;
+        $dispatch = app(DispatchZoneService::class);
+
+        $bookings = $this->visibleBookings()->orderBy('created_at', 'desc')->get()->map(function ($req) use ($professional, $dispatch) {
             $service = ClinicalService::find($req->service_id);
             $user = User::find($req->user_id);
             $dependent = $req->dependent_id ? Dependent::find($req->dependent_id) : null;
 
+            $outsideZone = $professional !== null
+                && !$dispatch->covers($professional, $req->zone);
+
             return [
+                'outside_zone' => $outsideZone,
                 'id' => $req->id,
                 'user_id' => $req->user_id,
                 'service_id' => $req->service_id,
@@ -70,9 +177,12 @@ class DoctorDashboardController extends Controller
                 'destination_address' => $req->destination_address,
                 'ambulance_type' => $req->ambulance_type,
                 'symptoms_description' => $req->symptoms_description,
+                // Authenticated media links, not raw storage paths.
+                'symptom_audio_url' => $req->symptom_audio_link,
+                'zone' => $req->zone,
                 'prescription_name' => $req->prescription_name,
                 'prescription_preview' => $req->prescription_preview,
-                'prescription_file' => $req->prescription_file,
+                'prescription_file' => $req->prescription_url,
                 'final_price' => $req->final_price,
                 'start_time' => $req->start_time,
                 'eta_minutes' => $req->eta_minutes,
@@ -82,7 +192,10 @@ class DoctorDashboardController extends Controller
                 'user' => $user,
                 'dependent' => $dependent,
             ];
-        });
+        })
+        // Own zone first, then the rest — both keep their newest-first order.
+        ->sortBy(fn ($booking) => $booking['outside_zone'] ? 1 : 0)
+        ->values();
 
         return response()->json($bookings);
     }
@@ -102,9 +215,7 @@ class DoctorDashboardController extends Controller
         }
 
         // Acting on an unassigned request claims it for this professional
-        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
-            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
-        }
+        $this->claimIfUnassigned($serviceRequest);
 
         $nextStatus = $validated['status'];
         $nextStep = 0;
@@ -123,6 +234,10 @@ class DoctorDashboardController extends Controller
             'status' => $nextStatus,
             'current_step' => $nextStep,
         ]);
+
+        // Keep the duty status in sync with reality so the zone wait estimate
+        // reflects actual capacity, not a flag someone forgot to flip.
+        $this->syncDutyStatus($serviceRequest->professional_id);
 
         $timeStr = date('H:i');
 
@@ -160,66 +275,7 @@ class DoctorDashboardController extends Controller
                 'timestamp' => $timeStr,
             ]);
 
-            // Replicate PastService saving logic
-            $service = ClinicalService::find($serviceRequest->service_id);
-            $serviceTitle = $service ? $service->title : 'Atención Médica';
-
-            $patientName = 'Usuario Principal';
-            if ($serviceRequest->patient_type === 'dependent' && $serviceRequest->dependent_id) {
-                $dep = Dependent::find($serviceRequest->dependent_id);
-                if ($dep) {
-                    $patientName = "{$dep->name} ({$dep->relationship})";
-                }
-            }
-
-            $professionals = [
-                'enfermeria' => ['Enf. Cristian Valenzuela', 'Enf. Patricia Jara', 'Enf. Rodrigo Montes'],
-                'medico' => ['Dra. Camila Rivera N. (Médico Internista)', 'Dr. Sebastián Leyton (Médico General)'],
-                'kine_motora' => ['Klgo. Ignacio Orellana', 'Klga. Maria José Díaz'],
-                'kine_respiratoria' => ['Klgo. Mauricio Pinilla', 'Klga. Solange Arancibia'],
-                'cuidados' => ['Cuidadora Julia Valdés', 'Cuidador Esteban Muñoz'],
-                'ambulancia' => ['Paramédico Carlos Rojas', 'Conductor Manuel Guerrero'],
-                'radiologia' => ['Tec. Radiólogo Daniel Gatica'],
-                'laboratorio' => ['Enf. Francisca Soto', 'Tec. Lab. Marcelo Castro'],
-                'electrocardiograma' => ['Enf. Cristián Valenzuela', 'Dra. Camila Rivera N.'],
-            ];
-
-            $staffList = $professionals[$serviceRequest->service_id] ?? ['Personal Clínico de Aura'];
-            $assignedStaff = $staffList[array_rand($staffList)];
-
-            $summaries = [
-                'enfermeria' => 'Procedimiento de enfermería realizado en domicilio según indicaciones médicas. Se administraron fármacos o curó herida respetando medidas de asepsia. Signos vitales estables.',
-                'medico' => 'Consulta médica general domiciliaria por síntomas agudos. Paciente evaluado exhaustivamente, se entregó receta médica digital y recomendaciones terapéuticas.',
-                'kine_motora' => 'Sesión de kinesiología motora enfocada en ejercicios terapéuticos de movilidad, marcha y fortalecimiento muscular. Buena tolerancia del paciente.',
-                'kine_respiratoria' => 'Sesión de kinesioterapia bronquial respiratoria, se aplicaron técnicas de aseo bronquial y ejercicios ventilatorios. Paciente refiere alivio de congestión.',
-                'cuidados' => 'Asistencia y compañía clínica integral para confort del paciente. Control de fármacos orales, movilización segura y apoyo en higiene básica.',
-                'ambulancia' => 'Traslado clínico programado finalizado exitosamente. Paciente movilizado de manera segura respetando protocolos de transporte clínico en camilla.',
-                'radiologia' => 'Estudio de radiología portátil digitalizado realizado en domicilio. Imagenología cargada en el portal y enviada al médico tratante. Sin incidentes.',
-                'laboratorio' => 'Toma de muestras sanguíneas y/o biológicas realizada en domicilio. Muestras refrigeradas y despachadas de inmediato al laboratorio central.',
-                'electrocardiograma' => 'Electrocardiograma de 12 derivaciones en reposo completado con éxito. El trazado fue enviado a tele-cardiología para informe definitivo.',
-            ];
-
-            $summary = $summaries[$serviceRequest->service_id] ?? 'Atención clínica domiciliaria realizada de manera conforme por el especialista de guardia.';
-
-            $months = [
-                'January' => 'Enero', 'February' => 'Febrero', 'March' => 'Marzo',
-                'April' => 'Abril', 'May' => 'Mayo', 'June' => 'Junio',
-                'July' => 'Julio', 'August' => 'Agosto', 'September' => 'Septiembre',
-                'October' => 'Octubre', 'November' => 'Noviembre', 'December' => 'Diciembre'
-            ];
-            $monthEn = date('F');
-            $monthEs = $months[$monthEn] ?? $monthEn;
-            $dateFormatted = date('d \d\e ') . $monthEs;
-
-            PastService::create([
-                'id' => 'past_' . time() . '_' . rand(100, 999),
-                'user_id' => $serviceRequest->user_id,
-                'service_title' => $serviceTitle,
-                'professional_name' => $assignedStaff,
-                'patient_name' => $patientName,
-                'date_str' => $dateFormatted,
-                'summary' => $summary,
-            ]);
+            $this->recordCompletedCare($serviceRequest);
         }
 
         return response()->json([
@@ -245,9 +301,7 @@ class DoctorDashboardController extends Controller
         }
 
         // Broadcasting a position also claims an unassigned request
-        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
-            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
-        }
+        $this->claimIfUnassigned($serviceRequest);
 
         $serviceRequest->update([
             'professional_lat' => $validated['lat'],
@@ -289,20 +343,18 @@ class DoctorDashboardController extends Controller
         }
 
         // Replying to an unassigned request also claims it
-        if (empty($serviceRequest->professional_id) && session('staff_professional_id') && !$this->isAdmin()) {
-            $serviceRequest->update(['professional_id' => session('staff_professional_id')]);
-        }
+        $this->claimIfUnassigned($serviceRequest);
 
         $message = ChatMessage::create([
             'id' => 'web_msg_' . time() . '_' . rand(100, 999),
             'service_request_id' => $id,
             'sender' => 'provider',
-            'sender_name' => session('staff_name'),
+            'sender_name' => $this->staffDisplayName(),
             'text' => $validated['text'],
             'timestamp' => date('H:i'),
         ]);
 
-        $senderName = session('staff_name', 'Equipo clínico');
+        $senderName = $this->staffDisplayName() ?: 'Equipo clínico';
         app(\App\Services\FcmService::class)->notifyUser(
             $serviceRequest->user_id,
             "Mensaje de $senderName",

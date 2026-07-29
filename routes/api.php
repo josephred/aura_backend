@@ -1,9 +1,13 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DoctorDashboardController;
+use App\Http\Controllers\StaffProfileController;
 use App\Http\Controllers\DeviceTokenController;
+use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\DependentController;
@@ -24,6 +28,9 @@ Route::get('/services', [ServiceController::class, 'index']);
 // 1b. Professionals catalog and availability (public)
 Route::get('/professionals', [AppointmentController::class, 'professionals']);
 Route::get('/professionals/{id}/slots', [AppointmentController::class, 'slots']);
+
+// 1c. Zone-based wait estimate (public: shown before the user commits)
+Route::get('/dispatch/eta', [DispatchController::class, 'eta']);
 
 // Payment notifications from Mercado Pago (public; payment data is
 // re-fetched server-side so the body cannot be forged)
@@ -59,7 +66,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings/active', [BookingController::class, 'active']);
     Route::post('/bookings', [BookingController::class, 'store']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
-    Route::post('/bookings/{id}/simulate-step', [BookingController::class, 'simulateStep']);
     Route::get('/bookings/{id}/sse', [BookingController::class, 'streamStatus']);
     Route::get('/bookings/{id}/payment-status', [BookingController::class, 'paymentStatus']);
 
@@ -72,10 +78,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments/{id}/video-signals', [AppointmentController::class, 'postVideoSignal']);
     Route::get('/appointments/{id}/video-signals', [AppointmentController::class, 'videoSignals']);
 
-    // 5. Chat tele-assistance & Simulated Responses
+    // 5. Chat tele-assistance (replies come from the professional's portal)
     Route::get('/bookings/{requestId}/chat', [ChatController::class, 'index']);
     Route::post('/bookings/{requestId}/chat', [ChatController::class, 'store']);
 
     // 6. Clinical History Digital Log
     Route::get('/history', [BookingController::class, 'history']);
+
+    // 7. Staff area for the mobile app.
+    //
+    // Deliberately points at the very same controllers the web portal uses:
+    // the clinical rules (zone scoping, claiming a request, duty status,
+    // history records) have one implementation, and the transport — session
+    // or bearer token — is resolved by ResolvesStaffScope.
+    Route::middleware('staff.api')->prefix('staff')->group(function () {
+        Route::get('/bookings', [DoctorDashboardController::class, 'bookings']);
+        Route::post('/bookings/{id}/status', [DoctorDashboardController::class, 'updateStatus']);
+        Route::post('/bookings/{id}/location', [DoctorDashboardController::class, 'updateLocation']);
+        Route::get('/bookings/{id}/messages', [DoctorDashboardController::class, 'getMessages']);
+        Route::post('/bookings/{id}/messages', [DoctorDashboardController::class, 'sendMessage']);
+        Route::get('/duty', [StaffProfileController::class, 'show']);
+        Route::post('/duty', [StaffProfileController::class, 'updateDuty']);
+    });
+
+    // 7b. Operations panel for the mobile app (operator/admin role only).
+    Route::middleware('staff.api:operator')->prefix('staff/admin')->group(function () {
+        Route::get('/metrics', [AdminDashboardController::class, 'metrics']);
+        Route::get('/zones', [AdminDashboardController::class, 'zones']);
+        Route::get('/professionals', [AdminDashboardController::class, 'professionals']);
+        Route::post('/professionals/{id}', [AdminDashboardController::class, 'updateProfessional']);
+    });
 });

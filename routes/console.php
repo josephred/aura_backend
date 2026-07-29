@@ -27,3 +27,7 @@ Artisan::command('fcm:test {userId} {title} {body}', function (\App\Services\Fcm
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('appointments:send-reminders')->everyFiveMinutes();
+
+// Abandoned checkouts would otherwise block the patient's only active request
+// slot and distort the zone wait estimates.
+Schedule::command('bookings:expire-unpaid')->everyFiveMinutes();

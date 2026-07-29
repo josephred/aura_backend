@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\ClinicalMediaController;
 use App\Http\Controllers\DoctorAgendaController;
 use App\Http\Controllers\DoctorDashboardController;
 use App\Http\Controllers\StaffAuthController;
@@ -12,6 +14,14 @@ Route::get('/', function () {
 Route::get('/politica-privacidad', function () {
     return view('privacy');
 });
+
+// Clinical attachments. Reachable from the app (Sanctum token) and from the
+// portal (staff session), never anonymously — these are health data.
+// Authorization is done inside the controller because the two callers use
+// different mechanisms: a Sanctum bearer token (app) and the staff session
+// (portal), which is not a Laravel auth guard.
+Route::get('/media/bookings/{bookingId}/{kind}', [ClinicalMediaController::class, 'show'])
+    ->where('kind', 'prescription|symptom-audio');
 
 // Staff login for the doctor portal
 Route::get('/doctor/login', [StaffAuthController::class, 'showLogin']);
@@ -39,7 +49,15 @@ Route::middleware('staff.auth')->group(function () {
     Route::post('/doctor/api/professionals/{id}/schedules', [DoctorAgendaController::class, 'storeSchedule']);
     Route::delete('/doctor/api/professionals/{id}/schedules/{blockId}', [DoctorAgendaController::class, 'destroySchedule']);
 
-    // Portal account management (admin only, enforced in controller)
-    Route::get('/doctor/api/accounts', [DoctorAgendaController::class, 'accounts']);
-    Route::post('/doctor/api/professionals/{id}/account', [DoctorAgendaController::class, 'saveAccount']);
+});
+
+// Operations panel — administration only, fully separate from the clinical
+// portal above. Admins land here after login; professionals never see it.
+Route::middleware('admin.auth')->group(function () {
+    Route::get('/admin', [AdminDashboardController::class, 'index']);
+    Route::get('/admin/api/metrics', [AdminDashboardController::class, 'metrics']);
+    Route::get('/admin/api/zones', [AdminDashboardController::class, 'zones']);
+    Route::get('/admin/api/professionals', [AdminDashboardController::class, 'professionals']);
+    Route::post('/admin/api/professionals/{id}', [AdminDashboardController::class, 'updateProfessional']);
+    Route::post('/admin/api/professionals/{id}/account', [AdminDashboardController::class, 'saveAccount']);
 });

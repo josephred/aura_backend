@@ -24,6 +24,10 @@ class DatabaseSeeder extends Seeder
         // 2. Load Clinical Services
         $this->call(ClinicalServicesSeeder::class);
 
+        // 2b. Professionals + one test account per role
+        $this->call(ProfessionalSeeder::class);
+        $this->call(TestUsersSeeder::class);
+
         // 3. Load Dependents
         \App\Models\Dependent::updateOrCreate([
             'id' => 'dep_1'

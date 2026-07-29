@@ -13,6 +13,8 @@ class ProfessionalSeeder extends Seeder
         $professionals = [
             [
                 'id' => 'prof_camila_rivera',
+                'coverage_zones' => 'Providencia, Ñuñoa, Las Condes, Santiago',
+                'duty_status' => 'disponible',
                 'name' => 'Dra. Camila Rivera N.',
                 'specialty' => 'Medicina Interna',
                 'bio' => 'Médico internista con 12 años de experiencia en atención de adultos y adultos mayores.',
@@ -29,6 +31,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_sebastian_leyton',
+                'coverage_zones' => 'Providencia, Santiago, Recoleta, Independencia',
+                'duty_status' => 'disponible',
                 'name' => 'Dr. Sebastián Leyton',
                 'specialty' => 'Medicina General',
                 'bio' => 'Médico general orientado a medicina familiar, controles crónicos y consultas agudas.',
@@ -45,6 +49,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_maria_diaz',
+                'coverage_zones' => 'Vitacura, Las Condes, Lo Barnechea, Providencia',
+                'duty_status' => 'disponible',
                 'name' => 'Klga. María José Díaz',
                 'specialty' => 'Kinesiología',
                 'bio' => 'Kinesióloga especialista en rehabilitación motora y respiratoria.',
@@ -60,6 +66,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_patricia_jara',
+                'coverage_zones' => 'Providencia, Ñuñoa, Macul, La Florida',
+                'duty_status' => 'disponible',
                 'name' => 'Enf. Patricia Jara',
                 'specialty' => 'Enfermería',
                 'bio' => 'Enfermera clínica: controles, curaciones y educación de pacientes.',

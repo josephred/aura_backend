@@ -4,14 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\ServiceRequest;
 use App\Models\ClinicalService;
-use App\Models\Dependent;
 use App\Models\ChatMessage;
 use App\Models\PastService;
+use App\Services\DispatchZoneService;
 use App\Services\FcmService;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Storage;
 
 class BookingController extends Controller
 {
@@ -20,7 +19,10 @@ class BookingController extends Controller
      */
     public function active(): JsonResponse
     {
-        $active = ServiceRequest::where('user_id', auth()->id())
+        // Eager-load so the serialized `assigned_professional` does not fire an
+        // extra query, and so the app can show who is really attending.
+        $active = ServiceRequest::with('professional')
+            ->where('user_id', auth()->id())
             ->whereNotIn('status', ['completed', 'cancelled'])
             ->first();
 
@@ -46,18 +48,37 @@ class BookingController extends Controller
             'prescription_name' => 'nullable|string',
             'prescription_preview' => 'nullable|string',
             'prescription_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
+            // Voice note describing the symptoms (max ~2 min at 64 kbps ≈ 1 MB;
+            // 5 MB leaves room for other encoders).
+            'symptom_audio' => 'nullable|file|mimes:m4a,mp4,aac,mp3,wav,ogg,webm|max:5120',
             'exam_required' => 'nullable|string',
             'final_price' => 'required|integer',
             'eta_minutes' => 'required|integer',
         ]);
 
-        // Persist the real prescription upload (multipart) and expose a public
-        // URL. When no file is attached (JSON booking) this stays null and the
-        // legacy `prescription_preview` string is kept for backward compat.
-        $prescriptionFileUrl = null;
+        // Fail closed BEFORE touching anything. Further down this method
+        // cancels the patient's current request and creates a new row, so a
+        // late failure would leave them with their previous request cancelled
+        // and an unpayable one in its place.
+        $mercadoPago = app(MercadoPagoService::class);
+        if (!$mercadoPago->isConfigured() && app()->environment('production')) {
+            return response()->json([
+                'message' => 'El sistema de pagos no está disponible en este momento. '
+                    . 'Tu solicitud no fue creada; inténtalo nuevamente en unos minutos.',
+            ], 503);
+        }
+
+        // Clinical attachments are health data: they go to the private disk and
+        // are served through /media/bookings/... which checks who is asking.
+        $prescriptionPath = null;
         if ($request->hasFile('prescription_file')) {
-            $storedPath = $request->file('prescription_file')->store('prescriptions', 'public');
-            $prescriptionFileUrl = Storage::disk('public')->url($storedPath);
+            $prescriptionPath = $request->file('prescription_file')->store('prescriptions', 'local');
+        }
+
+        // Optional voice note recorded in the symptom descriptor.
+        $symptomAudioPath = null;
+        if ($request->hasFile('symptom_audio')) {
+            $symptomAudioPath = $request->file('symptom_audio')->store('symptom-audio', 'local');
         }
 
         // Cancel any existing active request
@@ -67,6 +88,17 @@ class BookingController extends Controller
 
         $timeStr = date('H:i');
         $requestId = 'req_' . time();
+
+        // Requests are dispatched per zone (comuna), not to a hand-picked
+        // doctor: we resolve the zone here and quote the wait that the zone's
+        // current load implies.
+        $zones = app(DispatchZoneService::class);
+        $zone = $zones->resolveZoneFor(
+            $validated['origin_address'] ?? $validated['address_text'],
+            isset($validated['patient_lat']) ? (float) $validated['patient_lat'] : null,
+            isset($validated['patient_lng']) ? (float) $validated['patient_lng'] : null,
+        );
+        $estimate = $zones->estimate($validated['service_id'], null, $zone);
 
         $serviceRequest = ServiceRequest::create([
             'id' => $requestId,
@@ -82,23 +114,27 @@ class BookingController extends Controller
             'patient_lat' => $validated['patient_lat'] ?? null,
             'patient_lng' => $validated['patient_lng'] ?? null,
             'symptoms_description' => $validated['symptoms_description'] ?? null,
+            // Stored as a private disk path; the model turns it into the
+            // authenticated media URL when serialized.
+            'symptom_audio_url' => $symptomAudioPath,
             'prescription_name' => $validated['prescription_name'] ?? null,
-            // Point the preview at the stored public URL when a file was
-            // uploaded so the app and the doctor portal can render it.
-            'prescription_preview' => $prescriptionFileUrl ?? ($validated['prescription_preview'] ?? null),
-            'prescription_file' => $prescriptionFileUrl,
+            'prescription_preview' => $validated['prescription_preview'] ?? null,
+            'prescription_file' => $prescriptionPath,
             'exam_required' => $validated['exam_required'] ?? null,
             'payment_method' => 'mercadopago',
             'final_price' => $validated['final_price'],
             'start_time' => $timeStr,
-            'eta_minutes' => $validated['eta_minutes'],
+            // Trust the live zone estimate over the static per-service ETA the
+            // client sent, but never quote less than the client already saw.
+            'eta_minutes' => max($validated['eta_minutes'], $estimate['eta_min_minutes']),
+            'zone' => $zone,
+            'queue_eta_minutes' => $estimate['eta_max_minutes'],
             'current_step' => 0,
         ]);
 
         $service = ClinicalService::find($validated['service_id']);
         $serviceTitle = $service ? $service->short_title : 'Servicio';
 
-        $mercadoPago = app(MercadoPagoService::class);
         if ($mercadoPago->isConfigured()) {
             $preference = $mercadoPago->createPreference($serviceRequest, $serviceTitle);
             if ($preference) {
@@ -109,9 +145,22 @@ class BookingController extends Controller
                 ]);
                 return response()->json($serviceRequest->fresh(), 201);
             }
+
+            // Configured but the gateway did not answer. Never hand out free
+            // care in production: leave the request cancelled and let the
+            // patient retry.
+            if (app()->environment('production')) {
+                $serviceRequest->update(['status' => 'cancelled', 'current_step' => 0]);
+
+                return response()->json([
+                    'message' => 'No pudimos generar el cobro. Tu solicitud fue anulada '
+                        . 'y no se realizó ningún cargo. Inténtalo nuevamente.',
+                ], 503);
+            }
         }
 
-        // Gateway not configured or unreachable: activate immediately (simulated payment)
+        // Outside production only: no gateway configured, so activate the
+        // booking directly to keep local development and tests workable.
         $this->activateBooking($serviceRequest, $serviceTitle);
 
         return response()->json($serviceRequest->fresh(), 201);
@@ -134,11 +183,16 @@ class BookingController extends Controller
             'current_step' => 1,
         ]);
 
+        $zoneLabel = $serviceRequest->zone && $serviceRequest->zone !== 'General'
+            ? $serviceRequest->zone
+            : 'tu zona';
+
         ChatMessage::create([
             'id' => 'm1_' . time(),
             'service_request_id' => $serviceRequest->id,
             'sender' => 'system',
-            'text' => "Canal clínico seguro iniciado para: $serviceTitle.",
+            'text' => "Canal clínico seguro iniciado para: $serviceTitle. "
+                . "Tu solicitud está en la cola de $zoneLabel y se asignará al próximo profesional en turno del sector.",
             'timestamp' => $timeStr,
         ]);
 
@@ -221,150 +275,6 @@ class BookingController extends Controller
     }
 
     /**
-     * Simulate the next step in the active request.
-     */
-    public function simulateStep(string $id): JsonResponse
-    {
-        $serviceRequest = ServiceRequest::where('user_id', auth()->id())->where('id', $id)->first();
-
-        if (!$serviceRequest) {
-            return response()->json(['error' => 'Request not found'], 404);
-        }
-
-        $currentStep = $serviceRequest->current_step;
-        $nextStatus = '';
-        $nextStep = 0;
-
-        if ($currentStep === 1) {
-            $nextStatus = 'en_camino';
-            $nextStep = 2;
-        } elseif ($currentStep === 2) {
-            $nextStatus = 'en_atencion';
-            $nextStep = 3;
-        } elseif ($currentStep === 3) {
-            $nextStatus = 'completed';
-            $nextStep = 4;
-        } else {
-            return response()->json($serviceRequest);
-        }
-
-        $serviceRequest->update([
-            'status' => $nextStatus,
-            'current_step' => $nextStep,
-        ]);
-
-        $stepNotifications = [
-            2 => ['En camino', 'El profesional va en camino a tu domicilio.'],
-            3 => ['Atención en curso', 'El profesional llegó y la atención está en curso.'],
-            4 => ['Atención completada', 'Tu atención finalizó. El resumen ya está en tu historial.'],
-        ];
-        [$notifTitle, $notifBody] = $stepNotifications[$nextStep];
-        app(FcmService::class)->notifyUser(
-            $serviceRequest->user_id,
-            $notifTitle,
-            $notifBody,
-            ['booking_id' => $serviceRequest->id, 'status' => $nextStatus],
-        );
-
-        $timeStr = date('H:i');
-
-        // Add simulated chat message based on transition
-        if ($nextStep === 2) {
-            ChatMessage::create([
-                'id' => 'msg_step2_' . time(),
-                'service_request_id' => $id,
-                'sender' => 'provider',
-                'text' => 'He ingresado a la autopista principal. El tráfico es moderado, voy en camino directo a tu domicilio.',
-                'timestamp' => $timeStr,
-            ]);
-        } elseif ($nextStep === 3) {
-            ChatMessage::create([
-                'id' => 'msg_step3_' . time(),
-                'service_request_id' => $id,
-                'sender' => 'provider',
-                'text' => 'Acabo de llegar al domicilio. Por favor, indíqueme el número de timbre o si hay conserjería para anunciar mi ingreso.',
-                'timestamp' => $timeStr,
-            ]);
-        } elseif ($nextStep === 4) {
-            ChatMessage::create([
-                'id' => 'msg_step4_' . time(),
-                'service_request_id' => $id,
-                'sender' => 'system',
-                'text' => 'Atención completada con éxito. Resumen médico disponible en el historial.',
-                'timestamp' => $timeStr,
-            ]);
-
-            // Save past service record upon completion
-            $service = ClinicalService::find($serviceRequest->service_id);
-            $serviceTitle = $service ? $service->title : 'Atención Médica';
-
-            $patientName = 'Usuario Principal';
-            if ($serviceRequest->patient_type === 'dependent' && $serviceRequest->dependent_id) {
-                $dep = Dependent::find($serviceRequest->dependent_id);
-                if ($dep) {
-                    $patientName = "{$dep->name} ({$dep->relationship})";
-                }
-            }
-
-            $professionals = [
-                'enfermeria' => ['Enf. Cristian Valenzuela', 'Enf. Patricia Jara', 'Enf. Rodrigo Montes'],
-                'medico' => ['Dra. Camila Rivera N. (Médico Internista)', 'Dr. Sebastián Leyton (Médico General)'],
-                'kine_motora' => ['Klgo. Ignacio Orellana', 'Klga. Maria José Díaz'],
-                'kine_respiratoria' => ['Klgo. Mauricio Pinilla', 'Klga. Solange Arancibia'],
-                'cuidados' => ['Cuidadora Julia Valdés', 'Cuidador Esteban Muñoz'],
-                'ambulancia' => ['Paramédico Carlos Rojas', 'Conductor Manuel Guerrero'],
-                'radiologia' => ['Tec. Radiólogo Daniel Gatica'],
-                'laboratorio' => ['Enf. Francisca Soto', 'Tec. Lab. Marcelo Castro'],
-                'electrocardiograma' => ['Enf. Cristián Valenzuela', 'Dra. Camila Rivera N.'],
-            ];
-
-            $serviceKey = $serviceRequest->service_id;
-            $staffList = $professionals[$serviceKey] ?? ['Personal Clínico de Aura'];
-            $assignedStaff = $staffList[array_rand($staffList)];
-
-            $summaries = [
-                'enfermeria' => 'Procedimiento de enfermería realizado en domicilio según indicaciones médicas. Se administraron fármacos o curó herida respetando medidas de asepsia. Signos vitales estables.',
-                'medico' => 'Consulta médica general domiciliaria por síntomas agudos. Paciente evaluado exhaustivamente, se entregó receta médica digital y recomendaciones terapéuticas.',
-                'kine_motora' => 'Sesión de kinesiología motora enfocada en ejercicios terapéuticos de movilidad, marcha y fortalecimiento muscular. Buena tolerancia del paciente.',
-                'kine_respiratoria' => 'Sesión de kinesioterapia bronquial respiratoria, se aplicaron técnicas de aseo bronquial y ejercicios ventilatorios. Paciente refiere alivio de congestión.',
-                'cuidados' => 'Asistencia y compañía clínica integral para confort del paciente. Control de fármacos orales, movilización segura y apoyo en higiene básica.',
-                'ambulancia' => 'Traslado clínico programado finalizado exitosamente. Paciente movilizado de manera segura respetando protocolos de transporte clínico en camilla.',
-                'radiologia' => 'Estudio de radiología portátil digitalizado realizado en domicilio. Imagenología cargada en el portal y enviada al médico tratante. Sin incidentes.',
-                'laboratorio' => 'Toma de muestras sanguíneas y/o biológicas realizada en domicilio. Muestras refrigeradas y despachadas de inmediato al laboratorio central.',
-                'electrocardiograma' => 'Electrocardiograma de 12 derivaciones en reposo completado con éxito. El trazado fue enviado a tele-cardiología para informe definitivo.',
-            ];
-
-            $summary = $summaries[$serviceKey] ?? 'Atención clínica domiciliaria realizada de manera conforme por el especialista de guardia.';
-
-            // Month names mapping in Spanish
-            $months = [
-                'January' => 'Enero', 'February' => 'Febrero', 'March' => 'Marzo',
-                'April' => 'Abril', 'May' => 'Mayo', 'June' => 'Junio',
-                'July' => 'Julio', 'August' => 'Agosto', 'September' => 'Septiembre',
-                'October' => 'Octubre', 'November' => 'Noviembre', 'December' => 'Diciembre'
-            ];
-            $currentMonthEnglish = date('F');
-            $spanishMonth = $months[$currentMonthEnglish] ?? $currentMonthEnglish;
-            $dateStr = date('d \d\e ') . $spanishMonth . date(' Y');
-
-            PastService::create([
-                'id' => 'past_' . time(),
-                'user_id' => auth()->id(),
-                'service_id' => $serviceRequest->service_id,
-                'service_title' => $serviceTitle,
-                'date' => $dateStr,
-                'patient' => $patientName,
-                'price' => $serviceRequest->final_price,
-                'status' => 'completed',
-                'details' => $summary,
-                'professional' => $assignedStaff,
-            ]);
-        }
-
-        return response()->json($serviceRequest);
-    }
-
-    /**
      * Get the history of completed services.
      */
     public function history(): JsonResponse
@@ -390,7 +300,9 @@ class BookingController extends Controller
             // Loop for up to 50 seconds to avoid exceeding webserver timeout limits
             $elapsed = 0;
             while ($elapsed < 50) {
-                $serviceRequest = \App\Models\ServiceRequest::find($id);
+                // `with` keeps the appended assigned_professional from firing an
+                // extra query on every one-second tick of the stream.
+                $serviceRequest = \App\Models\ServiceRequest::with('professional')->find($id);
 
                 if (!$serviceRequest) {
                     echo "data: " . json_encode(['error' => 'Not found']) . "\n\n";

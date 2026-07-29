@@ -1076,6 +1076,10 @@
                                     <span id="patient-address">📍 Dirección</span>
                                     <span id="patient-symptoms">📝 Síntomas</span>
                                     <a id="patient-prescription" href="#" target="_blank" rel="noopener" style="display:none; color:#0D9488; font-weight:600; text-decoration:underline;">📎 Ver orden médica</a>
+                                    <span id="patient-zone" style="display:none;">🗺️ Zona</span>
+                                    <span id="patient-audio-wrap" style="display:none; align-items:center; gap:6px;">
+                                        🎙️ <audio id="patient-audio" controls preload="none" style="height:28px; vertical-align:middle;"></audio>
+                                    </span>
                                 </div>
                             </div>
                             <div class="banner-price">
@@ -1246,11 +1250,16 @@
                 return;
             }
 
-            let html = '';
-            bookings.forEach(b => {
+            // Zone-based dispatch: requests inside the professional's coverage
+            // are shown first; the rest go under a clearly separated heading so
+            // an uncovered comuna is still visible instead of orphaned.
+            const inZone = bookings.filter(b => !b.outside_zone);
+            const outOfZone = bookings.filter(b => b.outside_zone);
+
+            const cardFor = (b) => {
                 const isActive = b.id === selectedBookingId ? 'active' : '';
                 const serviceName = b.service ? b.service.title : 'Atención Médica';
-                
+
                 let displayName = b.user ? b.user.name : 'Paciente';
                 if (b.patient_type === 'dependent' && b.dependent) {
                     displayName = b.dependent.name + ` (${translateRelationship(b.dependent.relationship)})`;
@@ -1258,8 +1267,11 @@
 
                 const shortAddress = b.address_text || 'Dirección no especificada';
                 const createdTime = b.start_time || 'Ahora';
+                const zoneTag = b.zone && b.zone !== 'General'
+                    ? `<div class="card-time">🗺️ Zona: ${b.zone}</div>`
+                    : '';
 
-                html += `
+                return `
                     <div class="booking-card ${b.status} ${isActive}" onclick="selectBooking('${b.id}')">
                         <div class="card-top">
                             <span class="service-badge">${serviceName}</span>
@@ -1267,10 +1279,29 @@
                         </div>
                         <div class="card-patient">${displayName}</div>
                         <div class="card-address">📍 ${shortAddress}</div>
+                        ${zoneTag}
                         <div class="card-time">⏰ Solicitud: ${createdTime}</div>
                     </div>
                 `;
-            });
+            };
+
+            const heading = (text) => `
+                <div style="font-size:10px; font-weight:800; letter-spacing:0.8px; text-transform:uppercase;
+                            color:var(--text-secondary); margin:14px 4px 8px;">${text}</div>`;
+
+            let html = '';
+            if (outOfZone.length === 0) {
+                html = inZone.map(cardFor).join('');
+            } else {
+                if (inZone.length) {
+                    html += heading('En tu zona') + inZone.map(cardFor).join('');
+                }
+                html += heading(`Fuera de tu zona (${outOfZone.length})`)
+                    + `<div style="font-size:11px; color:var(--text-secondary); margin:0 4px 8px;">
+                           Puedes tomarlas si nadie del sector responde.
+                       </div>`
+                    + outOfZone.map(cardFor).join('');
+            }
             listContainer.innerHTML = html;
         }
 
@@ -1351,6 +1382,26 @@
             document.getElementById('patient-display-name').textContent = displayName;
             document.getElementById('patient-address').textContent = '📍 ' + b.address_text;
             document.getElementById('patient-symptoms').textContent = '📝 Sintomas: ' + (b.symptoms_description || 'Sin comentarios adicionales');
+
+            // Dispatch zone this request was queued in
+            const zoneEl = document.getElementById('patient-zone');
+            if (b.zone && b.zone !== 'General') {
+                zoneEl.textContent = '🗺️ Zona: ' + b.zone;
+                zoneEl.style.display = 'inline';
+            } else {
+                zoneEl.style.display = 'none';
+            }
+
+            // Voice note recorded by the patient in the symptom descriptor
+            const audioWrap = document.getElementById('patient-audio-wrap');
+            const audioEl = document.getElementById('patient-audio');
+            if (b.symptom_audio_url && /^https?:\/\//.test(b.symptom_audio_url)) {
+                audioEl.src = b.symptom_audio_url;
+                audioWrap.style.display = 'inline-flex';
+            } else {
+                audioEl.removeAttribute('src');
+                audioWrap.style.display = 'none';
+            }
 
             // Uploaded medical prescription (only render real server-hosted files)
             const rxLink = document.getElementById('patient-prescription');

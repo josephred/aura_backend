@@ -187,65 +187,8 @@ class DoctorAgendaController extends Controller
         return response()->json(['id' => $signal->id], 201);
     }
 
-    /**
-     * Portal accounts overview (admin only).
-     */
-    public function accounts(): JsonResponse
-    {
-        if (!$this->isAdmin()) {
-            return response()->json(['error' => 'Solo administradores'], 403);
-        }
-
-        $accounts = \App\Models\Professional::orderBy('name')->get()->map(fn ($p) => [
-            'id' => $p->id,
-            'name' => $p->name,
-            'specialty' => $p->specialty,
-            'email' => $p->email,
-            'role' => $p->role ?? 'professional',
-            'has_password' => !empty($p->password),
-            'last_login_at' => $p->last_login_at?->toIso8601String(),
-        ]);
-
-        return response()->json($accounts);
-    }
-
-    /**
-     * Create or update a professional's portal account (admin only).
-     * Returns the generated password when none is provided.
-     */
-    public function saveAccount(Request $request, string $professionalId): JsonResponse
-    {
-        if (!$this->isAdmin()) {
-            return response()->json(['error' => 'Solo administradores'], 403);
-        }
-
-        $professional = \App\Models\Professional::find($professionalId);
-        if (!$professional) {
-            return response()->json(['error' => 'Profesional no encontrado'], 404);
-        }
-
-        $validated = $request->validate([
-            'email' => 'required|email|unique:professionals,email,' . $professionalId,
-            'password' => 'nullable|string|min:8',
-        ]);
-
-        $generated = null;
-        $password = $validated['password'] ?? null;
-        if (empty($password)) {
-            $generated = \Illuminate\Support\Str::random(12);
-            $password = $generated;
-        }
-
-        $professional->update([
-            'email' => strtolower($validated['email']),
-            'password' => \Illuminate\Support\Facades\Hash::make($password),
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'generated_password' => $generated,
-        ]);
-    }
+    // Portal account management moved to AdminDashboardController: the
+    // operations panel (/admin) is independent from this clinical portal.
 
     /**
      * Signals sent by the patient, newer than the given id.

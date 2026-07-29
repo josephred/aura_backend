@@ -71,4 +71,12 @@ return [
         ],
     ],
 
+    // Reverse geocoding for dispatch zones. Defaults to the public Nominatim
+    // instance; point NOMINATIM_URL at a self-hosted one if volume grows.
+    // Their usage policy requires an identifiable User-Agent with contact info.
+    'nominatim' => [
+        'url' => env('NOMINATIM_URL', 'https://nominatim.openstreetmap.org/reverse'),
+        'user_agent' => env('NOMINATIM_USER_AGENT', 'AuraSalud/1.0 (contacto@aura.cl)'),
+    ],
+
 ];

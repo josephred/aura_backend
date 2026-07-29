@@ -15,10 +15,19 @@ class StaffAuthController extends Controller
     public function showLogin()
     {
         if (session('staff_authenticated')) {
-            return redirect('/doctor');
+            return redirect($this->landingFor(session('staff_role')));
         }
 
         return view('doctor.login');
+    }
+
+    /**
+     * Admins land on the operations panel; clinical staff on the doctor portal.
+     * The two areas are independent — neither embeds the other.
+     */
+    private function landingFor(?string $role): string
+    {
+        return $role === 'admin' ? '/admin' : '/doctor';
     }
 
     /**
@@ -49,7 +58,7 @@ class StaffAuthController extends Controller
         $request->session()->put('staff_name', $professional->name);
         $request->session()->put('staff_role', $professional->role ?? 'professional');
 
-        return redirect('/doctor');
+        return redirect($this->landingFor($professional->role ?? 'professional'));
     }
 
     /**

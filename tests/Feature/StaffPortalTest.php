@@ -155,7 +155,7 @@ class StaffPortalTest extends TestCase
         ])->assertStatus(201);
 
         // Account management: create credentials, password generated
-        $response = $this->postJson('/doctor/api/professionals/prof_a/account', [
+        $response = $this->postJson('/admin/api/professionals/prof_a/account', [
             'email' => 'nueva@aura.cl',
         ]);
         $response->assertStatus(200);
@@ -170,8 +170,8 @@ class StaffPortalTest extends TestCase
 
         $this->post('/doctor/login', ['email' => 'a@aura.cl', 'password' => 'clave-segura-123']);
 
-        $this->getJson('/doctor/api/accounts')->assertStatus(403);
-        $this->postJson('/doctor/api/professionals/prof_b/account', ['email' => 'x@aura.cl'])
+        $this->getJson('/admin/api/professionals')->assertStatus(403);
+        $this->postJson('/admin/api/professionals/prof_b/account', ['email' => 'x@aura.cl'])
             ->assertStatus(403);
     }
 

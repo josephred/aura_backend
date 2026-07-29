@@ -27,7 +27,8 @@ class ChatController extends Controller
     }
 
     /**
-     * Send a message and generate a simulated response.
+     * Store a message from the patient. The assigned professional answers it
+     * from the portal; nothing is auto-generated here.
      */
     public function store(Request $request, string $requestId): JsonResponse
     {
@@ -51,37 +52,16 @@ class ChatController extends Controller
             'timestamp' => $timeStr,
         ]);
 
-        // 2. Determine simulated reply based on keywords
-        $userTextLower = mb_strtolower($validated['text']);
-        $replyText = 'Entendido. Ya voy con todos los insumos necesarios de grado clínico. Llego según el tiempo estipulado. Mantenga el hogar a una temperatura agradable, por favor.';
-
-        if (str_contains($userTextLower, 'fiebre') || str_contains($userTextLower, 'temperatura')) {
-            $replyText = 'Llevo un termómetro clínico calibrado e insumos para ayudar a controlar la temperatura inmediatamente a mi llegada.';
-        } elseif (str_contains($userTextLower, 'dirección') || str_contains($userTextLower, 'calle') || str_contains($userTextLower, 'ubicacion') || str_contains($userTextLower, 'direccion')) {
-            $replyText = 'Gracias por la aclaración, el GPS me indica la ruta óptima. Llego según el tiempo estipulado.';
-        } elseif (str_contains($userTextLower, 'pago') || str_contains($userTextLower, 'pagar') || str_contains($userTextLower, 'precio')) {
-            $replyText = 'No se preocupe, visualizo que su pago ya fue procesado a través de su cuenta de forma 100% segura. No debe abonar nada extra al personal.';
-        }
-
-        // 3. Save provider reply message in DB
-        $providerMessage = ChatMessage::create([
-            'id' => 'msg_reply_' . time(),
-            'service_request_id' => $requestId,
-            'sender' => 'provider',
-            'text' => $replyText,
-            'timestamp' => $timeStr,
-        ]);
-
-        app(\App\Services\FcmService::class)->notifyUser(
-            $serviceRequest->user_id,
-            'Nuevo mensaje del equipo clínico',
-            $replyText,
-            ['booking_id' => $requestId, 'type' => 'chat'],
-        );
+        // No automatic reply is generated. The professional attending the
+        // request reads and answers from the portal, which polls this thread.
+        //
+        // The previous keyword bot competed with the real professional (the
+        // patient received two answers to every message) and one of its canned
+        // replies asserted "visualizo que su pago ya fue procesado" without
+        // ever checking the payment status.
 
         return response()->json([
             'patient_message' => $patientMessage,
-            'provider_message' => $providerMessage
         ], 201);
     }
 }

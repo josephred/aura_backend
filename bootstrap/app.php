@@ -29,6 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'staff.auth' => \App\Http\Middleware\StaffAuth::class,
+            'admin.auth' => \App\Http\Middleware\AdminAuth::class,
+            'staff.api' => \App\Http\Middleware\StaffApiAuth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

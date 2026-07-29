@@ -64,6 +64,7 @@ php artisan serve --port=8000
 
 # Terminal 2 — ngrok con tu dominio fijo apuntando al 8000
 ngrok http --url=emphatic-ranking-posh.ngrok-free.dev 8000
+ngrok http --url=emphatic-ranking-posh.ngrok-free.dev 8000
 (Si tu versión de ngrok es antigua, el flag es --domain= en vez de --url=.)
 
 Con eso, https://emphatic-ranking-posh.ngrok-free.dev queda visible desde cualquier red (datos móviles, PC externo), con certificado válido.
