@@ -30,4 +30,4 @@ ENV PORT=10000
 EXPOSE 10000
 
 # Run migrations and start Laravel server
-CMD ["sh", "-c", "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT"]
+CMD ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT"]
