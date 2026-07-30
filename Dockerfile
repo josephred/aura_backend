@@ -21,13 +21,14 @@ COPY . .
 # Install PHP production dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Set permissions for storage & cache
-RUN chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
+# Ensure storage subdirectories exist & set permissions
+RUN mkdir -p storage/framework/views storage/framework/sessions storage/framework/cache/data storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 777 storage bootstrap/cache
 
 # Default port for Render
 ENV PORT=10000
 EXPOSE 10000
 
-# Run migrations and start Laravel server
-CMD ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT"]
+# Clear view cache, run migrations, seed DB, and start server
+CMD ["sh", "-c", "php artisan storage:link || true && php artisan config:clear && php artisan view:clear && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT"]
