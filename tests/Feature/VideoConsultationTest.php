@@ -71,6 +71,7 @@ class VideoConsultationTest extends TestCase
             'professional_id' => 'prof_video',
             'scheduled_at' => now()->addDays(3)->setTime(9, 0)->format('Y-m-d H:i:s'),
             'type' => 'video',
+            'reason' => 'tos y fiebre',
         ]);
 
         $response->assertStatus(201)

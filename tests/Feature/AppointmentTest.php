@@ -81,7 +81,7 @@ class AppointmentTest extends TestCase
         $response = $this->withToken($tokenA)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => $slot,
-            'reason' => 'Dolor de cabeza persistente',
+            'reason' => 'dolor de cabeza persistente y fiebre',
         ]);
         $response->assertStatus(201)
             ->assertJsonPath('status', 'confirmed')
@@ -98,6 +98,7 @@ class AppointmentTest extends TestCase
         $this->withToken($tokenB)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => $slot,
+            'reason' => 'tos y fiebre',
         ])->assertStatus(409);
     }
 
@@ -110,24 +111,28 @@ class AppointmentTest extends TestCase
         $this->withToken($token)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => now()->addDays(7)->setTime(14, 0)->format('Y-m-d H:i:s'),
+            'reason' => 'tos y fiebre',
         ])->assertStatus(409);
 
         // 10:45 is inside the block but misaligned with the 30-minute grid
         $this->withToken($token)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => now()->addDays(7)->setTime(10, 45)->format('Y-m-d H:i:s'),
+            'reason' => 'tos y fiebre',
         ])->assertStatus(409);
 
         // Past dates are rejected
         $this->withToken($token)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => now()->subDay()->setTime(9, 0)->format('Y-m-d H:i:s'),
+            'reason' => 'tos y fiebre',
         ])->assertStatus(422);
 
         // Beyond the 30-day horizon is rejected
         $this->withToken($token)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => now()->addDays(60)->setTime(9, 0)->format('Y-m-d H:i:s'),
+            'reason' => 'tos y fiebre',
         ])->assertStatus(422);
     }
 
@@ -149,6 +154,7 @@ class AppointmentTest extends TestCase
         $response = $this->withToken($token)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => now()->addDays(7)->setTime(9, 0)->format('Y-m-d H:i:s'),
+            'reason' => 'tos y fiebre',
         ]);
         $response->assertStatus(201)
             ->assertJsonPath('status', 'pending_payment')
@@ -188,6 +194,7 @@ class AppointmentTest extends TestCase
         $response = $this->withToken($tokenA)->postJson('/api/appointments', [
             'professional_id' => 'prof_test',
             'scheduled_at' => $slot,
+            'reason' => 'tos y fiebre',
         ]);
         $appointmentId = $response->json('id');
 

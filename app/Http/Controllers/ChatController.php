@@ -45,7 +45,7 @@ class ChatController extends Controller
 
         // 1. Save patient message
         $patientMessage = ChatMessage::create([
-            'id' => 'msg_patient_' . time(),
+            'id' => ChatMessage::nextId('msg_patient'),
             'service_request_id' => $requestId,
             'sender' => 'patient',
             'text' => $validated['text'],

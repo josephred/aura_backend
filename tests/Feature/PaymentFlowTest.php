@@ -45,6 +45,8 @@ class PaymentFlowTest extends TestCase
             'service_id' => 'medico',
             'patient_type' => 'self',
             'address_text' => 'Av. Siempre Viva 742',
+            // The medical service now requires at least two symptoms.
+            'symptoms_description' => 'dolor de cabeza y fiebre',
             'final_price' => 45000,
             'eta_minutes' => 45,
         ];

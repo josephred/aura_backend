@@ -29,6 +29,9 @@ class StaffApiTest extends TestCase
             'base_eta' => '30 - 45',
             'requires_prescription' => false,
             'icon_name' => 'medical_services',
+            // NOT NULL en el catálogo; sin ellas el insert falla.
+            'warning_info' => 'Servicio no apto para urgencias de riesgo vital.',
+            'placeholder_text' => 'Ej. fiebre alta y tos seca',
         ]);
     }
 
@@ -184,6 +187,8 @@ class StaffApiTest extends TestCase
         $this->withHeaders(['Authorization' => "Bearer $professionalToken"])
             ->getJson('/api/staff/admin/metrics')
             ->assertStatus(403);
+
+        $this->app['auth']->forgetGuards();
 
         [, $operatorToken] = $this->staffUser('operator_admin', null);
         $this->withHeaders(['Authorization' => "Bearer $operatorToken"])

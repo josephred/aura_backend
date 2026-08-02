@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Rules\AtLeastTwoSymptoms;
 use App\Models\Professional;
 use App\Models\VideoSignal;
 use App\Services\FcmService;
@@ -111,7 +112,8 @@ class AppointmentController extends Controller
             'professional_id' => 'required|string|exists:professionals,id',
             'scheduled_at' => 'required|date',
             'dependent_id' => 'nullable|string|exists:dependents,id',
-            'reason' => 'nullable|string|max:500',
+            // Scheduled consultations also open a clinical history.
+            'reason' => ['required', 'string', 'max:500', new AtLeastTwoSymptoms()],
             'type' => 'nullable|string|in:presencial,video',
         ]);
 
@@ -162,7 +164,7 @@ class AppointmentController extends Controller
                 'dependent_id' => $validated['dependent_id'] ?? null,
                 'scheduled_at' => $scheduledAt,
                 'duration_minutes' => $professional->consultation_duration_minutes,
-                'reason' => $validated['reason'] ?? null,
+                'reason' => $validated['reason'],
                 'type' => $validated['type'] ?? 'presencial',
                 'status' => 'pending_payment',
                 'price' => $professional->consultation_price,

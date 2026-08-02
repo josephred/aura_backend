@@ -14,6 +14,8 @@ use App\Http\Controllers\DependentController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\LabController;
+use App\Http\Controllers\LabPortalController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\SocialAuthController;
 
@@ -31,6 +33,11 @@ Route::get('/professionals/{id}/slots', [AppointmentController::class, 'slots'])
 
 // 1c. Zone-based wait estimate (public: shown before the user commits)
 Route::get('/dispatch/eta', [DispatchController::class, 'eta']);
+
+// 1d. Lab collection availability (public: the patient must be able to see
+// which days have slots before deciding to request anything)
+Route::get('/lab/slots', [LabController::class, 'slots']);
+Route::get('/lab/availability', [LabController::class, 'availability']);
 
 // Payment notifications from Mercado Pago (public; payment data is
 // re-fetched server-side so the body cannot be forged)
@@ -82,6 +89,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings/{requestId}/chat', [ChatController::class, 'index']);
     Route::post('/bookings/{requestId}/chat', [ChatController::class, 'store']);
 
+    // 4c. Lab collections (Módulo E). Scheduled into a published slot instead
+    // of dispatched immediately, so they get their own endpoints rather than
+    // riding on /bookings.
+    Route::get('/lab/requests', [LabController::class, 'index']);
+    Route::post('/lab/requests', [LabController::class, 'store']);
+    Route::post('/lab/requests/{id}/cancel', [LabController::class, 'cancel']);
+    Route::get('/lab/requests/{id}/payment-status', [LabController::class, 'paymentStatus']);
+    // "Mis Exámenes": historical, downloadable reports.
+    Route::get('/lab/results', [LabController::class, 'results']);
+    Route::get('/lab/results/{id}/link', [LabController::class, 'resultLink']);
+
     // 6. Clinical History Digital Log
     Route::get('/history', [BookingController::class, 'history']);
 
@@ -99,6 +117,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bookings/{id}/messages', [DoctorDashboardController::class, 'sendMessage']);
         Route::get('/duty', [StaffProfileController::class, 'show']);
         Route::post('/duty', [StaffProfileController::class, 'updateDuty']);
+
+        // Lab area for the laboratorista working from the phone. Same
+        // controller as the web portal, so the scheduling rules exist once.
+        Route::get('/lab/schedules', [LabPortalController::class, 'schedules']);
+        Route::post('/lab/schedules', [LabPortalController::class, 'storeSchedule']);
+        Route::delete('/lab/schedules/{blockId}', [LabPortalController::class, 'destroySchedule']);
+        Route::get('/lab/collections', [LabPortalController::class, 'collections']);
+        Route::post('/lab/collections/{id}/results', [LabPortalController::class, 'uploadResult']);
+        Route::get('/lab/earnings', [LabPortalController::class, 'earnings']);
     });
 
     // 7b. Operations panel for the mobile app (operator/admin role only).

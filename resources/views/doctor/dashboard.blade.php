@@ -988,6 +988,7 @@
         <div class="doctor-profile">
             <button type="button" class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema" style="margin-right:16px;">☀️</button>
             <a href="/doctor/agenda" style="color:var(--accent-teal-light);text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">📅 Agenda de citas</a>
+            <a href="/doctor/laboratorio" style="color:var(--accent-teal-light);text-decoration:none;font-weight:600;font-size:14px;margin-right:20px;">🧪 Laboratorio</a>
             <div class="profile-info">
                 <div class="profile-name">{{ session('staff_name', 'Equipo Aura') }}</div>
                 <div class="profile-role">{{ session('staff_role') === 'admin' ? 'Administración' : 'Profesional clínico' }}</div>

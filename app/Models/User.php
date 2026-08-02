@@ -53,12 +53,12 @@ class User extends Authenticatable
     /** Roles allowed to reach the staff endpoints from the app. */
     public function isStaff(): bool
     {
-        return in_array($this->role, ['doctor_provider', 'operator_admin'], true);
+        return in_array($this->role, ['doctor_provider', 'operator_admin', 'admin', 'professional'], true);
     }
 
     public function isOperator(): bool
     {
-        return $this->role === 'operator_admin';
+        return in_array($this->role, ['operator_admin', 'admin'], true);
     }
 
     /**

@@ -84,6 +84,36 @@ class TestUsersSeeder extends Seeder
             'role' => 'professional',
         ]);
 
+        // Laboratorista de prueba (Módulo E). Es una cuenta aparte porque la
+        // toma de muestras se agenda contra bloques publicados por alguien
+        // habilitado con `provides_lab`, no contra la guardia médica.
+        Professional::updateOrCreate(['id' => 'prof_test_laboratorio'], [
+            'name' => 'TM. Laboratorio de Prueba',
+            'specialty' => 'Tecnología Médica',
+            'bio' => 'Cuenta de prueba para el área de laboratorio del portal.',
+            'consultation_price' => 19500,
+            'consultation_duration_minutes' => 30,
+            'active' => true,
+            'provides_lab' => true,
+            'coverage_zones' => 'Providencia, Ñuñoa, Santiago',
+            'duty_status' => 'disponible',
+            'email' => 'laboratorio@aura.cl',
+            'password' => Hash::make(self::PASSWORD),
+            'role' => 'professional',
+        ]);
+
+        // Su contraparte en la app, para que pueda trabajar desde el teléfono.
+        $labUser = User::updateOrCreate(['id' => 15], [
+            'name' => 'Laboratorista de Prueba',
+            'email' => 'laboratorista@aura.cl',
+            'password' => Hash::make(self::PASSWORD),
+        ]);
+        $labUser->forceFill([
+            'role' => 'doctor_provider',
+            'is_test_account' => true,
+            'professional_id' => 'prof_test_laboratorio',
+        ])->save();
+
         Professional::updateOrCreate(['id' => 'staff_test_operador'], [
             'name' => 'Operador de Prueba',
             'specialty' => 'Administración',
@@ -100,5 +130,7 @@ class TestUsersSeeder extends Seeder
         foreach (self::ACCOUNTS as $email => [, , $role]) {
             $this->command?->line("  - $email  ($role)");
         }
+        $this->command?->line('  - laboratorista@aura.cl  (doctor_provider · laboratorio)');
+        $this->command?->line('  - laboratorio@aura.cl  (portal web · laboratorio)');
     }
 }

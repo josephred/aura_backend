@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LabResult;
 use App\Models\ServiceRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,6 +49,64 @@ class ClinicalMediaController extends Controller
             null,
             ['Cache-Control' => 'private, max-age=0, no-store'],
         );
+    }
+
+    /**
+     * Streams a lab report (E.4).
+     *
+     * Same rule as any other clinical attachment: the owning patient or portal
+     * staff, never an anonymous link holder. The PDF is also emailed to the
+     * patient, but that copy is an attachment — this route is what backs the
+     * "Mis Exámenes" download, and it checks who is asking every time.
+     */
+    public function labResult(Request $request, string $resultId): Response
+    {
+        $result = LabResult::find($resultId);
+        abort_if($result === null, 404);
+
+        $serviceRequest = ServiceRequest::find($result->service_request_id);
+        abort_if($serviceRequest === null, 404);
+
+        // A valid, unexpired signature is the app opening the PDF in the system
+        // viewer, which cannot carry the bearer token. The signature covers the
+        // whole URL, so it grants access to this report and nothing else.
+        $signed = $request->hasValidSignature();
+        abort_unless($signed || $this->mayAccessLabResult($request, $serviceRequest), 403);
+
+        abort_unless(Storage::disk('local')->exists($result->file_path), 404);
+
+        return Storage::disk('local')->response(
+            $result->file_path,
+            $result->file_name,
+            ['Cache-Control' => 'private, max-age=0, no-store'],
+        );
+    }
+
+    /**
+     * Regla más estrecha que la de los adjuntos: un informe de laboratorio lo
+     * lee su paciente, el prestador que efectivamente hizo esa toma, o la
+     * administración.
+     *
+     * `mayAccess()` acepta a cualquier miembro del portal porque un profesional
+     * de guardia tiene que poder abrir la receta de una solicitud que aún nadie
+     * tomó. Un resultado ya emitido no tiene ese problema: pertenece a una toma
+     * que ya está asignada, así que no hay razón para que cualquier prestador
+     * del portal pueda descargarlo con solo conocer el id.
+     */
+    private function mayAccessLabResult(Request $request, ServiceRequest $serviceRequest): bool
+    {
+        if ($request->hasSession() && $request->session()->get('staff_authenticated')) {
+            if ($request->session()->get('staff_role') === 'admin') {
+                return true;
+            }
+
+            return !empty($serviceRequest->professional_id)
+                && $serviceRequest->professional_id === $request->session()->get('staff_professional_id');
+        }
+
+        $user = auth('sanctum')->user();
+
+        return $user !== null && (int) $serviceRequest->user_id === (int) $user->id;
     }
 
     /**

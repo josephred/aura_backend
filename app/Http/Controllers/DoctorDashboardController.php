@@ -244,7 +244,7 @@ class DoctorDashboardController extends Controller
         // Post chat updates corresponding to the step
         if ($nextStatus === 'accepted') {
             ChatMessage::create([
-                'id' => 'web_msg_step1_' . time(),
+                'id' => ChatMessage::nextId('web_msg_step1'),
                 'service_request_id' => $id,
                 'sender' => 'provider',
                 'text' => 'Hola, soy tu especialista clínico asignado. Ya estoy preparando el equipamiento para salir hacia tu dirección.',
@@ -252,7 +252,7 @@ class DoctorDashboardController extends Controller
             ]);
         } elseif ($nextStatus === 'en_camino') {
             ChatMessage::create([
-                'id' => 'web_msg_step2_' . time(),
+                'id' => ChatMessage::nextId('web_msg_step2'),
                 'service_request_id' => $id,
                 'sender' => 'provider',
                 'text' => 'He iniciado el trayecto hacia tu ubicación. Voy en camino directo.',
@@ -260,7 +260,7 @@ class DoctorDashboardController extends Controller
             ]);
         } elseif ($nextStatus === 'en_atencion') {
             ChatMessage::create([
-                'id' => 'web_msg_step3_' . time(),
+                'id' => ChatMessage::nextId('web_msg_step3'),
                 'service_request_id' => $id,
                 'sender' => 'provider',
                 'text' => 'He llegado al domicilio. Estoy tocando el timbre para ingresar.',
@@ -268,7 +268,7 @@ class DoctorDashboardController extends Controller
             ]);
         } elseif ($nextStatus === 'completed') {
             ChatMessage::create([
-                'id' => 'web_msg_step4_' . time(),
+                'id' => ChatMessage::nextId('web_msg_step4'),
                 'service_request_id' => $id,
                 'sender' => 'system',
                 'text' => 'Atención completada con éxito. Resumen médico disponible en el historial.',
@@ -276,6 +276,12 @@ class DoctorDashboardController extends Controller
             ]);
 
             $this->recordCompletedCare($serviceRequest);
+
+            // El dinero entró a la plataforma; aquí queda anotado cuánto se
+            // retuvo y cuánto se le debe al prestador. Es idempotente, así que
+            // cerrar dos veces la atención no duplica el devengo.
+            app(\App\Services\SettlementService::class)
+                ->recordForServiceRequest($serviceRequest->fresh());
         }
 
         return response()->json([
@@ -346,7 +352,7 @@ class DoctorDashboardController extends Controller
         $this->claimIfUnassigned($serviceRequest);
 
         $message = ChatMessage::create([
-            'id' => 'web_msg_' . time() . '_' . rand(100, 999),
+            'id' => ChatMessage::nextId('web_msg'),
             'service_request_id' => $id,
             'sender' => 'provider',
             'sender_name' => $this->staffDisplayName(),

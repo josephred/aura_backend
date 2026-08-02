@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\ClinicalMediaController;
 use App\Http\Controllers\DoctorAgendaController;
 use App\Http\Controllers\DoctorDashboardController;
+use App\Http\Controllers\LabPortalController;
 use App\Http\Controllers\StaffAuthController;
 
 Route::get('/', function () {
@@ -22,6 +23,14 @@ Route::get('/politica-privacidad', function () {
 // (portal), which is not a Laravel auth guard.
 Route::get('/media/bookings/{bookingId}/{kind}', [ClinicalMediaController::class, 'show'])
     ->where('kind', 'prescription|symptom-audio');
+
+// Lab reports (Módulo E). Same authorization rule as the attachments above,
+// plus one extra door: a short-lived signed link. The app has to hand the PDF
+// to the system viewer, which does not carry the patient's bearer token, so
+// /api/lab/results/{id}/link mints a signature that expires in minutes instead
+// of leaving the report readable by anyone with the URL.
+Route::get('/media/lab-results/{resultId}', [ClinicalMediaController::class, 'labResult'])
+    ->name('lab-results.show');
 
 // Staff login for the doctor portal
 Route::get('/doctor/login', [StaffAuthController::class, 'showLogin']);
@@ -48,6 +57,16 @@ Route::middleware('staff.auth')->group(function () {
     Route::get('/doctor/api/professionals/{id}/schedules', [DoctorAgendaController::class, 'schedules']);
     Route::post('/doctor/api/professionals/{id}/schedules', [DoctorAgendaController::class, 'storeSchedule']);
     Route::delete('/doctor/api/professionals/{id}/schedules/{blockId}', [DoctorAgendaController::class, 'destroySchedule']);
+
+    // Lab area (Módulo E): publish collection blocks, see the day's route and
+    // upload results.
+    Route::get('/doctor/laboratorio', [LabPortalController::class, 'index']);
+    Route::get('/doctor/api/lab/schedules', [LabPortalController::class, 'schedules']);
+    Route::post('/doctor/api/lab/schedules', [LabPortalController::class, 'storeSchedule']);
+    Route::delete('/doctor/api/lab/schedules/{blockId}', [LabPortalController::class, 'destroySchedule']);
+    Route::get('/doctor/api/lab/collections', [LabPortalController::class, 'collections']);
+    Route::post('/doctor/api/lab/collections/{id}/results', [LabPortalController::class, 'uploadResult']);
+    Route::get('/doctor/api/lab/earnings', [LabPortalController::class, 'earnings']);
 
 });
 

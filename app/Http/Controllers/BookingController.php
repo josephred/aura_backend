@@ -8,12 +8,16 @@ use App\Models\ChatMessage;
 use App\Models\PastService;
 use App\Services\DispatchZoneService;
 use App\Services\FcmService;
+use App\Rules\AtLeastTwoSymptoms;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class BookingController extends Controller
 {
+    /** Services whose form collects symptoms and therefore requires them. */
+    private const SERVICES_REQUIRING_SYMPTOMS = ['medico'];
+
     /**
      * Get the active service request for the user.
      */
@@ -21,9 +25,23 @@ class BookingController extends Controller
     {
         // Eager-load so the serialized `assigned_professional` does not fire an
         // extra query, and so the app can show who is really attending.
+        //
+        // A scheduled lab collection is not "the active request" while it is
+        // still days away: it must not take over the tracking screen, and — more
+        // importantly — it must not be cancelled by `store()` the moment the
+        // patient asks for a doctor today. It joins the active channel only
+        // once its slot is imminent or the laboratorista is already moving.
         $active = ServiceRequest::with('professional')
             ->where('user_id', auth()->id())
             ->whereNotIn('status', ['completed', 'cancelled'])
+            ->where(function ($query) {
+                $query->where('is_scheduled', false)
+                    ->orWhereIn('status', ['en_camino', 'en_atencion'])
+                    ->orWhere('scheduled_at', '<=', now()->addMinutes(
+                        (int) config('aura.lab.activation_window_minutes'),
+                    ));
+            })
+            ->orderByRaw('CASE WHEN is_scheduled = 1 THEN 1 ELSE 0 END')
             ->first();
 
         return response()->json($active);
@@ -44,7 +62,16 @@ class BookingController extends Controller
             'ambulance_type' => 'nullable|string',
             'patient_lat' => 'nullable|numeric',
             'patient_lng' => 'nullable|numeric',
-            'symptoms_description' => 'nullable|string',
+            // The clinical history is opened from this text, so services that
+            // ask for symptoms require at least two of them.
+            'symptoms_description' => [
+                in_array($request->input('service_id'), self::SERVICES_REQUIRING_SYMPTOMS, true)
+                    ? 'required'
+                    : 'nullable',
+                'string',
+                'max:1000',
+                new AtLeastTwoSymptoms(),
+            ],
             'prescription_name' => 'nullable|string',
             'prescription_preview' => 'nullable|string',
             'prescription_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
@@ -81,13 +108,22 @@ class BookingController extends Controller
             $symptomAudioPath = $request->file('symptom_audio')->store('symptom-audio', 'local');
         }
 
-        // Cancel any existing active request
+        // Cancel any existing active request.
+        //
+        // Scheduled work is deliberately excluded: a toma de muestras booked
+        // for Thursday is a separate commitment with a reserved slot, and
+        // silently cancelling it because the patient needed a doctor today
+        // would free the slot without anyone being told.
         ServiceRequest::where('user_id', auth()->id())
+            ->where('is_scheduled', false)
             ->whereNotIn('status', ['completed', 'cancelled'])
             ->update(['status' => 'cancelled', 'current_step' => 0]);
 
         $timeStr = date('H:i');
-        $requestId = 'req_' . time();
+        // Mismo problema que en los ids de chat: `time()` solo tiene resolución
+        // de un segundo, así que dos pacientes que confirman a la vez chocaban
+        // contra la clave primaria.
+        $requestId = 'req_' . now()->timestamp . '_' . \Illuminate\Support\Str::lower(\Illuminate\Support\Str::random(4));
 
         // Requests are dispatched per zone (comuna), not to a hand-picked
         // doctor: we resolve the zone here and quote the wait that the zone's
@@ -168,9 +204,19 @@ class BookingController extends Controller
 
     /**
      * Mark a booking as paid/accepted and open its clinical chat channel.
+     *
+     * Public because the lab flow lives in its own controller but must confirm
+     * bookings through exactly this path — two copies of "what happens when a
+     * request is paid" is how the chat channel ends up missing on one of them.
      */
-    private function activateBooking(ServiceRequest $serviceRequest, ?string $serviceTitle = null): void
+    public function activateBooking(ServiceRequest $serviceRequest, ?string $serviceTitle = null): void
     {
+        if ($serviceRequest->is_scheduled) {
+            $this->activateScheduledBooking($serviceRequest);
+
+            return;
+        }
+
         if ($serviceTitle === null) {
             $service = ClinicalService::find($serviceRequest->service_id);
             $serviceTitle = $service ? $service->short_title : 'Servicio';
@@ -188,7 +234,7 @@ class BookingController extends Controller
             : 'tu zona';
 
         ChatMessage::create([
-            'id' => 'm1_' . time(),
+            'id' => ChatMessage::nextId('m1'),
             'service_request_id' => $serviceRequest->id,
             'sender' => 'system',
             'text' => "Canal clínico seguro iniciado para: $serviceTitle. "
@@ -197,7 +243,7 @@ class BookingController extends Controller
         ]);
 
         ChatMessage::create([
-            'id' => 'm2_' . time(),
+            'id' => ChatMessage::nextId('m2'),
             'service_request_id' => $serviceRequest->id,
             'sender' => 'provider',
             'text' => "Hola, soy el especialista asignado para tu atención de $serviceTitle. Ya estoy coordinando los insumos médicos necesarios y me dirijo hacia tu ubicación. ¿Hay algún detalle adicional que deba saber del paciente?",
@@ -210,6 +256,77 @@ class BookingController extends Controller
             "Tu solicitud de $serviceTitle fue confirmada. El especialista ya está en coordinación.",
             ['booking_id' => $serviceRequest->id, 'status' => 'accepted'],
         );
+    }
+
+    /**
+     * Confirm a booking that was reserved into a published slot.
+     *
+     * It lands on `scheduled`, not `accepted`: nobody is on their way yet, and
+     * telling the patient "voy en camino" days before the collection would be
+     * both wrong and alarming. The messages state what actually happens —
+     * the slot is reserved and the indications reached the laboratorista.
+     */
+    private function activateScheduledBooking(ServiceRequest $serviceRequest): void
+    {
+        $serviceRequest->update([
+            'status' => 'scheduled',
+            'current_step' => 1,
+        ]);
+
+        $when = $this->formatScheduleEs($serviceRequest->scheduled_at);
+        $timeStr = date('H:i');
+
+        ChatMessage::create([
+            'id' => ChatMessage::nextId('m1'),
+            'service_request_id' => $serviceRequest->id,
+            'sender' => 'system',
+            'text' => "Toma de muestras agendada para el $when en {$serviceRequest->address_text}. "
+                . 'Este canal queda abierto para coordinar cualquier cambio.',
+            'timestamp' => $timeStr,
+        ]);
+
+        if (!empty($serviceRequest->clinical_notes)) {
+            ChatMessage::create([
+                'id' => ChatMessage::nextId('m2'),
+                'service_request_id' => $serviceRequest->id,
+                'sender' => 'system',
+                'text' => 'Indicaciones registradas para el laboratorista: '
+                    . $serviceRequest->clinical_notes,
+                'timestamp' => $timeStr,
+            ]);
+        }
+
+        app(FcmService::class)->notifyUser(
+            $serviceRequest->user_id,
+            'Toma de muestras agendada',
+            "Tu toma de muestras quedó agendada para el $when.",
+            ['booking_id' => $serviceRequest->id, 'status' => 'scheduled'],
+        );
+    }
+
+    /**
+     * Human date in Spanish for a scheduled collection.
+     */
+    private function formatScheduleEs($scheduledAt): string
+    {
+        if (empty($scheduledAt)) {
+            return 'la fecha acordada';
+        }
+
+        $date = $scheduledAt instanceof \Carbon\Carbon
+            ? $scheduledAt
+            : \Carbon\Carbon::parse($scheduledAt);
+
+        $days = ['Monday' => 'lunes', 'Tuesday' => 'martes', 'Wednesday' => 'miércoles',
+            'Thursday' => 'jueves', 'Friday' => 'viernes', 'Saturday' => 'sábado', 'Sunday' => 'domingo'];
+        $months = ['January' => 'enero', 'February' => 'febrero', 'March' => 'marzo', 'April' => 'abril',
+            'May' => 'mayo', 'June' => 'junio', 'July' => 'julio', 'August' => 'agosto',
+            'September' => 'septiembre', 'October' => 'octubre', 'November' => 'noviembre', 'December' => 'diciembre'];
+
+        $day = $days[$date->format('l')] ?? $date->format('l');
+        $month = $months[$date->format('F')] ?? $date->format('F');
+
+        return "$day {$date->day} de $month a las {$date->format('H:i')}";
     }
 
     /**

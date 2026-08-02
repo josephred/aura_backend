@@ -25,9 +25,20 @@ class ServiceRequest extends Model
         'assigned_professional',
     ];
 
+    protected $casts = [
+        'scheduled_at' => 'datetime',
+        'is_scheduled' => 'boolean',
+    ];
+
     public function professional(): BelongsTo
     {
         return $this->belongsTo(Professional::class);
+    }
+
+    /** Informes cargados por el laboratorio para esta toma de muestras. */
+    public function labResults(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(LabResult::class);
     }
 
     /**

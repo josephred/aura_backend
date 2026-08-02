@@ -421,4 +421,31 @@ class DispatchZoneService
 
         return mb_strtolower(strtr($value, $map));
     }
+
+    /**
+     * Calculates direct distance in km between origin and destination coordinates.
+     */
+    public function calculateDistanceKm(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadiusKm = 6371.0;
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($dLon / 2) * sin($dLon / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return round($earthRadiusKm * $c, 2);
+    }
+
+    /**
+     * Calculates dynamic transport fee based on distance (base rate + price per km).
+     */
+    public function calculateTransportFee(float $distanceKm, int $baseFee = 5000, int $pricePerKm = 1200): int
+    {
+        return (int) round($baseFee + ($distanceKm * $pricePerKm));
+    }
 }

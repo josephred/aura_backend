@@ -149,6 +149,7 @@ class AuraTest extends TestCase
                              'service_id' => 'medico',
                              'patient_type' => 'self',
                              'address_text' => 'Calle Principal 456',
+                             'symptoms_description' => 'dolor de cabeza y fiebre',
                              'final_price' => 25000,
                              'eta_minutes' => 30,
                          ]);
@@ -214,6 +215,7 @@ class AuraTest extends TestCase
                              'service_id' => 'medico',
                              'patient_type' => 'self',
                              'address_text' => 'Calle Principal 456',
+                             'symptoms_description' => 'dolor de cabeza y fiebre',
                              'final_price' => 25000,
                              'eta_minutes' => 30,
                          ]);
