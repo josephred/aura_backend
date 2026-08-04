@@ -30,4 +30,4 @@ RUN mkdir -p storage/framework/views storage/framework/sessions storage/framewor
 ENV PORT=10000
 EXPOSE 10000
 
-CMD ["sh", "-c", "[ -f .env ] || cp .env.example .env && php artisan storage:link || true && php artisan key:generate --force && php artisan config:clear && php artisan view:clear && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT"]
+CMD ["sh", "-c", "[ -f .env ] || (cp .env.example .env && sed -i '/^DB_CONNECTION=/d' .env) && php artisan storage:link || true && php artisan key:generate --force && php artisan config:clear && php artisan view:clear && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT"]

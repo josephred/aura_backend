@@ -28,7 +28,23 @@ class Professional extends Model
         'active' => 'boolean',
         'provides_lab' => 'boolean',
         'last_login_at' => 'datetime',
+        'years_of_experience' => 'integer',
+        'rating_count' => 'integer',
     ];
+
+    /**
+     * Promedio de evaluación, o null si todavía nadie evaluó.
+     *
+     * La columna arranca en 5.00 por defecto. Serializar ese valor sin
+     * matices haría que cada profesional recién dado de alta apareciera con
+     * cinco estrellas ante el paciente, sin que nadie lo haya atendido.
+     */
+    public function getRatingAvgAttribute($value): ?float
+    {
+        return (int) ($this->attributes['rating_count'] ?? 0) > 0
+            ? (float) $value
+            : null;
+    }
 
     /** Bloques de toma de muestras publicados por este prestador. */
     public function labSchedules(): HasMany

@@ -48,7 +48,12 @@ class ServiceRequest extends Model
      * The app renders "asignando profesional" on null — showing a placeholder
      * name would tell the patient who is coming to their home, and be wrong.
      *
-     * @return array{id:string,name:string,specialty:?string,phone:?string}|null
+     * Incluye la ficha que el paciente tiene derecho a ver antes de que
+     * llegue alguien a su casa (B.3): experiencia, registro y evaluación.
+     *
+     * `rating_avg` viaja como null mientras no haya evaluaciones. La columna
+     * tiene 5.00 por defecto, y publicar eso sería anunciar un profesional
+     * impecable del que nadie ha opinado todavía.
      */
     public function getAssignedProfessionalAttribute(): ?array
     {
@@ -61,11 +66,19 @@ class ServiceRequest extends Model
             return null;
         }
 
+        $ratingCount = (int) ($professional->rating_count ?? 0);
+
         return [
             'id' => $professional->id,
             'name' => $professional->name,
             'specialty' => $professional->specialty,
             'phone' => $professional->phone,
+            'bio' => $professional->bio,
+            'photo_url' => $professional->photo_url,
+            'registration_number' => $professional->registration_number,
+            'years_of_experience' => $professional->years_of_experience,
+            'rating_avg' => $ratingCount > 0 ? (float) $professional->rating_avg : null,
+            'rating_count' => $ratingCount,
         ];
     }
 

@@ -87,6 +87,19 @@ class DoctorAgendaController extends Controller
 
         $appointment->update(['status' => $validated['status']]);
 
+        if ($validated['status'] === 'completed') {
+            // Una cita atendida devenga igual que una visita a domicilio. Sin
+            // esto, `SettlementService::recordForAppointment()` existía pero no
+            // lo invocaba nadie: el paciente pagaba la consulta, la plataforma
+            // se quedaba el importe completo y el profesional no acumulaba
+            // ningún saldo a su favor.
+            //
+            // Es idempotente, así que cerrar dos veces la misma cita no duplica
+            // el devengo.
+            app(\App\Services\SettlementService::class)
+                ->recordForAppointment($appointment->fresh());
+        }
+
         if ($validated['status'] === 'cancelled') {
             app(FcmService::class)->notifyUser(
                 $appointment->user_id,

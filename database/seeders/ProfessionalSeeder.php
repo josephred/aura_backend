@@ -13,6 +13,8 @@ class ProfessionalSeeder extends Seeder
         $professionals = [
             [
                 'id' => 'prof_camila_rivera',
+                'registration_number' => 'SIS-118472',
+                'years_of_experience' => 12,
                 'coverage_zones' => 'Providencia, Ñuñoa, Las Condes, Santiago',
                 'duty_status' => 'disponible',
                 'name' => 'Dra. Camila Rivera N.',
@@ -31,6 +33,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_sebastian_leyton',
+                'registration_number' => 'SIS-204915',
+                'years_of_experience' => 8,
                 'coverage_zones' => 'Providencia, Santiago, Recoleta, Independencia',
                 'duty_status' => 'disponible',
                 'name' => 'Dr. Sebastián Leyton',
@@ -49,6 +53,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_maria_diaz',
+                'registration_number' => 'SIS-331208',
+                'years_of_experience' => 9,
                 'coverage_zones' => 'Vitacura, Las Condes, Lo Barnechea, Providencia',
                 'duty_status' => 'disponible',
                 'name' => 'Klga. María José Díaz',
@@ -66,6 +72,8 @@ class ProfessionalSeeder extends Seeder
             ],
             [
                 'id' => 'prof_patricia_jara',
+                'registration_number' => 'SIS-097654',
+                'years_of_experience' => 14,
                 'coverage_zones' => 'Providencia, Ñuñoa, Macul, La Florida',
                 'duty_status' => 'disponible',
                 'name' => 'Enf. Patricia Jara',

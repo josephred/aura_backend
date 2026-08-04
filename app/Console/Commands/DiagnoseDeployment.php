@@ -135,7 +135,11 @@ class DiagnoseDeployment extends Command
         $appUrl = (string) config('app.url');
         if ($appUrl === '' || str_contains($appUrl, 'localhost') || str_contains($appUrl, 'ngrok')) {
             $this->bad(
-                "APP_URL apunta a «$appUrl».",
+                // `«{$appUrl}»` con llaves: sin ellas PHP interpreta «$appUrl»
+                // como la variable `$appUrl»` (los bytes altos son válidos en
+                // un identificador) y este comando reventaría justo cuando
+                // detecta el problema que vino a buscar.
+                "APP_URL apunta a «{$appUrl}».",
                 'Los enlaces de audio y recetas que recibe la app se construyen con esta '
                 . 'URL. Debe ser el dominio real del servidor nuevo.',
             );
