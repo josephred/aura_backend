@@ -113,7 +113,7 @@
         td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         tr:last-child td { border-bottom: none; }
 
-        input, select {
+        input {
             background: var(--surface-2);
             border: 1px solid var(--border);
             color: var(--text);
@@ -123,9 +123,20 @@
             width: 100%;
         }
 
+        select {
+            color-scheme: dark;
+            background: #111827;
+            border: 1px solid var(--border);
+            color: #F8FAFC;
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 12px;
+            width: 100%;
+        }
+
         select option {
-            background-color: var(--surface-2, #1e293b);
-            color: var(--text, #f8fafc);
+            background-color: #111827 !important;
+            color: #F8FAFC !important;
             padding: 8px 12px;
         }
 

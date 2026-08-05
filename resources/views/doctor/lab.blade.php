@@ -128,15 +128,29 @@
         .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
         .control-group { display: flex; flex-direction: column; gap: 6px; }
         .control-group label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-        input, select, textarea {
+        input, textarea {
             background: var(--input-bg); border: 1px solid var(--card-border);
             border-radius: 10px; padding: 9px 12px; color: var(--text-primary);
             font-size: 13px; min-width: 130px;
         }
+        select {
+            color-scheme: dark;
+            background: #111827; border: 1px solid var(--card-border);
+            border-radius: 10px; padding: 9px 12px; color: #F8FAFC;
+            font-size: 13px; min-width: 130px;
+        }
+        :root[data-theme="light"] select {
+            color-scheme: light;
+            background: #FFFFFF; color: #0F172A;
+        }
         select option {
-            background-color: var(--card-bg, #1e293b);
-            color: var(--text-primary, #f8fafc);
+            background-color: #111827 !important;
+            color: #F8FAFC !important;
             padding: 8px 12px;
+        }
+        :root[data-theme="light"] select option {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
         }
         textarea { min-width: 260px; resize: vertical; }
 

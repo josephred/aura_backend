@@ -571,7 +571,7 @@
             text-transform: uppercase;
         }
 
-        select, input[type="time"], input[type="email"] {
+        input[type="time"], input[type="email"] {
             background-color: var(--input-bg);
             color: var(--text-primary);
             border: 1px solid var(--card-border);
@@ -583,10 +583,34 @@
             width: 100%;
         }
 
+        select {
+            color-scheme: dark;
+            background-color: #111827;
+            color: #F8FAFC;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.25s ease;
+            width: 100%;
+        }
+
+        :root[data-theme="light"] select {
+            color-scheme: light;
+            background-color: #FFFFFF;
+            color: #0F172A;
+        }
+
         select option {
-            background-color: var(--card-bg, #1e293b);
-            color: var(--text-primary, #f8fafc);
-            padding: 8px 12px;
+            background-color: #111827 !important;
+            color: #F8FAFC !important;
+            padding: 10px 14px;
+        }
+
+        :root[data-theme="light"] select option {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
         }
 
         select:focus, input[type="time"]:focus, input[type="email"]:focus {
