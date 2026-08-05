@@ -133,6 +133,11 @@
             border-radius: 10px; padding: 9px 12px; color: var(--text-primary);
             font-size: 13px; min-width: 130px;
         }
+        select option {
+            background-color: var(--card-bg, #1e293b);
+            color: var(--text-primary, #f8fafc);
+            padding: 8px 12px;
+        }
         textarea { min-width: 260px; resize: vertical; }
 
         .btn {

@@ -123,6 +123,12 @@
             width: 100%;
         }
 
+        select option {
+            background-color: var(--surface-2, #1e293b);
+            color: var(--text, #f8fafc);
+            padding: 8px 12px;
+        }
+
         .pill {
             display: inline-block;
             font-size: 10px;

@@ -583,6 +583,12 @@
             width: 100%;
         }
 
+        select option {
+            background-color: var(--card-bg, #1e293b);
+            color: var(--text-primary, #f8fafc);
+            padding: 8px 12px;
+        }
+
         select:focus, input[type="time"]:focus, input[type="email"]:focus {
             border-color: var(--accent-teal);
             box-shadow: 0 0 8px rgba(13, 148, 136, 0.2);
