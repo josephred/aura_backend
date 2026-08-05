@@ -47,7 +47,7 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'Profesional no encontrado'], 404);
         }
 
-        $date = Carbon::createFromFormat('Y-m-d', $validated['date'])->startOfDay();
+        $date = Carbon::createFromFormat('Y-m-d', $validated['date'], config('app.timezone'))->startOfDay();
         if ($date->lt(now()->startOfDay()) || $date->gt(now()->addDays(self::MAX_DAYS_AHEAD))) {
             return response()->json(['slots' => []]);
         }
@@ -84,7 +84,7 @@ class AppointmentController extends Controller
             ->map(fn ($dt) => Carbon::parse($dt)->format('Y-m-d H:i'))
             ->all();
 
-        $minimumStart = now()->addMinutes(15);
+        $minimumStart = now(config('app.timezone'))->addMinutes(15);
         $slots = [];
 
         foreach ($blocks as $block) {
@@ -94,7 +94,7 @@ class AppointmentController extends Controller
             while ($cursor->copy()->addMinutes($duration)->lte($blockEnd)) {
                 $isTaken = in_array($cursor->format('Y-m-d H:i'), $taken);
                 if (!$isTaken && $cursor->gt($minimumStart)) {
-                    $slots[] = $cursor->toIso8601String();
+                    $slots[] = $cursor->format('Y-m-d\TH:i:s');
                 }
                 $cursor->addMinutes($duration);
             }
