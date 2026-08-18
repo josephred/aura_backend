@@ -906,6 +906,18 @@
             align-self: flex-end;
         }
 
+        /* Quien firma el mensaje. En la guardia un mismo hilo lo atienden
+           varios profesionales y la coordinación, así que hace falta saber
+           de quién es cada respuesta. */
+        .chat-author {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            opacity: 0.85;
+            align-self: flex-start;
+        }
+
         .chat-input-area {
             padding: 16px;
             border-top: 1px solid var(--card-border);
@@ -1195,6 +1207,20 @@
         }
         updateThemeIcon();
 
+        // Todo lo que entra aqui viene del paciente: su nombre, su direccion
+        // y el texto que escribe en el chat. Se estaba inyectando tal cual en
+        // innerHTML, asi que un mensaje con etiquetas HTML se ejecutaba dentro
+        // de la sesion autenticada del profesional.
+        function esc(value) {
+            if (value === null || value === undefined) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         let bookings = [];
         let selectedBookingId = null;
         let chatPollTimer = null;
@@ -1269,19 +1295,19 @@
                 const shortAddress = b.address_text || 'Dirección no especificada';
                 const createdTime = b.start_time || 'Ahora';
                 const zoneTag = b.zone && b.zone !== 'General'
-                    ? `<div class="card-time">🗺️ Zona: ${b.zone}</div>`
+                    ? `<div class="card-time">🗺️ Zona: ${esc(b.zone)}</div>`
                     : '';
 
                 return `
-                    <div class="booking-card ${b.status} ${isActive}" onclick="selectBooking('${b.id}')">
+                    <div class="booking-card ${esc(b.status)} ${isActive}" onclick="selectBooking('${esc(b.id)}')">
                         <div class="card-top">
-                            <span class="service-badge">${serviceName}</span>
-                            <span class="status-badge ${b.status}">${translateStatus(b.status)}</span>
+                            <span class="service-badge">${esc(serviceName)}</span>
+                            <span class="status-badge ${esc(b.status)}">${esc(translateStatus(b.status))}</span>
                         </div>
-                        <div class="card-patient">${displayName}</div>
-                        <div class="card-address">📍 ${shortAddress}</div>
+                        <div class="card-patient">${esc(displayName)}</div>
+                        <div class="card-address">📍 ${esc(shortAddress)}</div>
                         ${zoneTag}
-                        <div class="card-time">⏰ Solicitud: ${createdTime}</div>
+                        <div class="card-time">⏰ Solicitud: ${esc(createdTime)}</div>
                     </div>
                 `;
             };
@@ -1529,10 +1555,17 @@
                     const chatBox = document.getElementById('chat-messages-box');
                     let html = '';
                     messages.forEach(msg => {
+                        const who = ['patient', 'provider', 'system'].includes(msg.sender)
+                            ? msg.sender
+                            : 'system';
+                        const signature = msg.sender_name
+                            ? `<span class="chat-author">${esc(msg.sender_name)}</span>`
+                            : '';
                         html += `
-                            <div class="chat-bubble ${msg.sender}">
-                                <span>${msg.text}</span>
-                                <span class="chat-time">${msg.timestamp}</span>
+                            <div class="chat-bubble ${who}">
+                                ${signature}
+                                <span>${esc(msg.text)}</span>
+                                <span class="chat-time">${esc(msg.timestamp)}</span>
                             </div>
                         `;
                     });
@@ -1558,15 +1591,24 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
                 body: JSON.stringify({ text: text })
             })
-            .then(res => res.json())
-            .then(msg => {
-                fetchChatMessages();
+            .then(res => {
+                // Un 419 (sesion caducada) o un 404 devolvian una promesa
+                // resuelta: el texto desaparecia del cuadro y el profesional
+                // se quedaba creyendo que el paciente lo habia recibido.
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
             })
-            .catch(err => console.error("Error sending message:", err));
+            .then(() => fetchChatMessages())
+            .catch(err => {
+                console.error("Error sending message:", err);
+                input.value = text;
+                alert('No se pudo enviar el mensaje al paciente. Revisa tu conexión e inténtalo de nuevo.');
+            });
         }
 
         function handleChatKeyPress(e) {

@@ -241,40 +241,64 @@ class DoctorDashboardController extends Controller
 
         $timeStr = date('H:i');
 
-        // Post chat updates corresponding to the step
-        if ($nextStatus === 'accepted') {
-            ChatMessage::create([
-                'id' => ChatMessage::nextId('web_msg_step1'),
-                'service_request_id' => $id,
+        // Aviso de cada paso en el canal clínico.
+        //
+        // Iban sin `sender_name`, así que en el teléfono aparecían como un
+        // «alguien» sin firma justo donde el resto de los mensajes del
+        // profesional sí llevan nombre. Y no salía ninguna notificación: el
+        // paciente solo se enteraba de que el profesional venía en camino si
+        // tenía la app abierta en ese preciso momento.
+        $staffName = $this->staffDisplayName();
+
+        $stepMessages = [
+            'accepted' => [
+                'prefix' => 'web_msg_step1',
                 'sender' => 'provider',
+                'title' => 'Tu atención fue tomada',
                 'text' => 'Hola, soy tu especialista clínico asignado. Ya estoy preparando el equipamiento para salir hacia tu dirección.',
-                'timestamp' => $timeStr,
-            ]);
-        } elseif ($nextStatus === 'en_camino') {
-            ChatMessage::create([
-                'id' => ChatMessage::nextId('web_msg_step2'),
-                'service_request_id' => $id,
+            ],
+            'en_camino' => [
+                'prefix' => 'web_msg_step2',
                 'sender' => 'provider',
+                'title' => 'El profesional va en camino',
                 'text' => 'He iniciado el trayecto hacia tu ubicación. Voy en camino directo.',
-                'timestamp' => $timeStr,
-            ]);
-        } elseif ($nextStatus === 'en_atencion') {
-            ChatMessage::create([
-                'id' => ChatMessage::nextId('web_msg_step3'),
-                'service_request_id' => $id,
+            ],
+            'en_atencion' => [
+                'prefix' => 'web_msg_step3',
                 'sender' => 'provider',
+                'title' => 'El profesional llegó',
                 'text' => 'He llegado al domicilio. Estoy tocando el timbre para ingresar.',
-                'timestamp' => $timeStr,
-            ]);
-        } elseif ($nextStatus === 'completed') {
-            ChatMessage::create([
-                'id' => ChatMessage::nextId('web_msg_step4'),
-                'service_request_id' => $id,
+            ],
+            'completed' => [
+                'prefix' => 'web_msg_step4',
                 'sender' => 'system',
+                'title' => 'Atención completada',
                 'text' => 'Atención completada con éxito. Resumen médico disponible en el historial.',
+            ],
+        ];
+
+        if (isset($stepMessages[$nextStatus])) {
+            $step = $stepMessages[$nextStatus];
+
+            ChatMessage::create([
+                'id' => ChatMessage::nextId($step['prefix']),
+                'service_request_id' => $id,
+                'sender' => $step['sender'],
+                // Los del sistema no se firman: no los escribió nadie.
+                'sender_name' => $step['sender'] === 'provider' ? $staffName : null,
+                'text' => $step['text'],
                 'timestamp' => $timeStr,
             ]);
 
+            app(\App\Services\FcmService::class)->notifyUser(
+                $serviceRequest->user_id,
+                $step['title'],
+                $step['text'],
+                ['booking_id' => $serviceRequest->id, 'type' => 'chat'],
+            );
+        }
+
+        if ($nextStatus === 'completed') {
             $this->recordCompletedCare($serviceRequest);
 
             // El dinero entró a la plataforma; aquí queda anotado cuánto se

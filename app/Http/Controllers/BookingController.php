@@ -408,18 +408,41 @@ class BookingController extends Controller
      */
     public function streamStatus($id)
     {
-        return response()->stream(function () use ($id) {
+        // Por este stream viaja el hilo completo del canal clinico. Se abria
+        // con `ServiceRequest::find($id)` a secas: cualquier usuario
+        // autenticado que conociera —o adivinara— el id de otra reserva leia
+        // su seguimiento, su direccion y toda la conversacion con el
+        // profesional. La reserva se resuelve contra el dueno de la sesion, y
+        // el bucle vuelve a consultarla siempre acotada a ese usuario.
+        $userId = auth()->id();
+
+        $owns = ServiceRequest::where('user_id', $userId)->where('id', $id)->exists();
+        if (!$owns) {
+            return response()->json(['error' => 'Service request not found'], 404);
+        }
+
+        // Un 204 le dice a la app "aquí no hay stream" sin que se quede
+        // reintentando: ella sigue con su propio refresco del hilo.
+        if (!config('aura.sse.enabled')) {
+            return response()->noContent();
+        }
+
+        $maxSeconds = max(1, (int) config('aura.sse.max_seconds'));
+
+        return response()->stream(function () use ($id, $userId, $maxSeconds) {
             $lastStatus = null;
             $lastStep = null;
             $lastMessageCount = null;
             $lastLocation = null;
 
-            // Loop for up to 50 seconds to avoid exceeding webserver timeout limits
+            // Se corta antes del timeout del servidor web; el cliente reabre.
             $elapsed = 0;
-            while ($elapsed < 50) {
+            while ($elapsed < $maxSeconds) {
                 // `with` keeps the appended assigned_professional from firing an
                 // extra query on every one-second tick of the stream.
-                $serviceRequest = \App\Models\ServiceRequest::with('professional')->find($id);
+                $serviceRequest = \App\Models\ServiceRequest::with('professional')
+                    ->where('user_id', $userId)
+                    ->find($id);
 
                 if (!$serviceRequest) {
                     echo "data: " . json_encode(['error' => 'Not found']) . "\n\n";
@@ -451,6 +474,14 @@ class BookingController extends Controller
                     ]) . "\n\n";
                     ob_flush();
                     flush();
+                }
+
+                // Cerrada o anulada la atencion ya no hay nada que emitir.
+                // Mantener el proceso ocupado los 50 s completos solo le quita
+                // un worker a la siguiente peticion — incluida la del propio
+                // paciente pidiendo el chat.
+                if (in_array($serviceRequest->status, ['completed', 'cancelled'], true)) {
+                    break;
                 }
 
                 sleep(1);
