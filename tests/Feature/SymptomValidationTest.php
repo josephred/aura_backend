@@ -130,4 +130,32 @@ class SymptomValidationTest extends TestCase
             ])
             ->assertStatus(201);
     }
+
+    public function test_booking_accepts_single_exam_description_for_radiology(): void
+    {
+        ClinicalService::create([
+            'id' => 'radiologia',
+            'title' => 'Radiografía a domicilio',
+            'short_title' => 'Radiología',
+            'subtitle' => 'Rayos X',
+            'description' => 'Servicio de imágenes',
+            'base_price' => 45000,
+            'base_eta' => '45 - 60',
+            'requires_prescription' => true,
+            'icon_name' => 'camera',
+            'warning_info' => 'Requiere orden médica previa.',
+            'placeholder_text' => 'Indica qué radiografía necesitas',
+        ]);
+
+        $this->withToken($this->token())
+            ->postJson('/api/bookings', [
+                'service_id' => 'radiologia',
+                'patient_type' => 'self',
+                'address_text' => 'Av. Providencia 1234, Providencia',
+                'symptoms_description' => 'Radiografía de tórax',
+                'final_price' => 45000,
+                'eta_minutes' => 45,
+            ])
+            ->assertStatus(201);
+    }
 }

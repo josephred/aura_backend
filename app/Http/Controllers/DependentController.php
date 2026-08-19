@@ -25,10 +25,17 @@ class DependentController extends Controller
             'id' => 'required|string',
             'name' => 'required|string',
             'relationship' => 'required|string',
-            'age' => 'required|integer',
+            'age' => 'nullable|integer',
+            'birth_date' => 'nullable|date',
             'health_insurance' => 'required|string',
             'medical_conditions' => 'nullable|string',
         ]);
+
+        if (empty($validated['age']) && !empty($validated['birth_date'])) {
+            $validated['age'] = (int) abs(now()->diffInYears($validated['birth_date']));
+        } elseif (empty($validated['age'])) {
+            $validated['age'] = 0;
+        }
 
         $validated['user_id'] = auth()->id();
 
@@ -50,10 +57,15 @@ class DependentController extends Controller
         $validated = $request->validate([
             'name' => 'required|string',
             'relationship' => 'required|string',
-            'age' => 'required|integer',
+            'age' => 'nullable|integer',
+            'birth_date' => 'nullable|date',
             'health_insurance' => 'required|string',
             'medical_conditions' => 'nullable|string',
         ]);
+
+        if (empty($validated['age']) && !empty($validated['birth_date'])) {
+            $validated['age'] = (int) abs(now()->diffInYears($validated['birth_date']));
+        }
 
         $dependent->update($validated);
 

@@ -22,7 +22,8 @@ Route::get('/politica-privacidad', function () {
 // different mechanisms: a Sanctum bearer token (app) and the staff session
 // (portal), which is not a Laravel auth guard.
 Route::get('/media/bookings/{bookingId}/{kind}', [ClinicalMediaController::class, 'show'])
-    ->where('kind', 'prescription|symptom-audio');
+    ->where('kind', 'prescription|symptom-audio')
+    ->name('media.booking.show');
 
 // Lab reports (Módulo E). Same authorization rule as the attachments above,
 // plus one extra door: a short-lived signed link. The app has to hand the PDF
@@ -68,6 +69,9 @@ Route::middleware('staff.auth')->group(function () {
     Route::post('/doctor/api/lab/collections/{id}/results', [LabPortalController::class, 'uploadResult']);
     Route::get('/doctor/api/lab/earnings', [LabPortalController::class, 'earnings']);
 
+    // Professional profile and curriculum
+    Route::get('/doctor/api/profile', [StaffProfileController::class, 'show']);
+    Route::post('/doctor/api/profile', [StaffProfileController::class, 'update']);
 });
 
 // Operations panel — administration only, fully separate from the clinical

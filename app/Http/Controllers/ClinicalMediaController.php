@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\LabResult;
 use App\Models\ServiceRequest;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -23,6 +25,34 @@ class ClinicalMediaController extends Controller
         'prescription' => 'prescription_file',
         'symptom-audio' => 'symptom_audio_url',
     ];
+
+    /**
+     * Mints a short-lived signed link for opening the attachment in external viewers.
+     */
+    public function signedLink(Request $request, string $bookingId, string $kind): JsonResponse
+    {
+        $column = self::KINDS[$kind] ?? null;
+        abort_if($column === null, 404);
+
+        $serviceRequest = ServiceRequest::find($bookingId);
+        abort_if($serviceRequest === null, 404);
+        abort_unless($this->mayAccess($request, $serviceRequest), 403);
+
+        $path = $serviceRequest->{$column};
+        abort_if(empty($path), 404);
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return response()->json(['url' => $path]);
+        }
+
+        $signedUrl = URL::temporarySignedRoute(
+            'media.booking.show',
+            now()->addMinutes(15),
+            ['bookingId' => $bookingId, 'kind' => $kind],
+        );
+
+        return response()->json(['url' => $signedUrl]);
+    }
 
     public function show(Request $request, string $bookingId, string $kind): Response
     {
@@ -110,18 +140,47 @@ class ClinicalMediaController extends Controller
     }
 
     /**
-     * The owning patient (API token) or any signed-in portal staff member.
+     * The owning patient (API token), assigned professional, or authorized staff.
      */
     private function mayAccess(Request $request, ServiceRequest $serviceRequest): bool
     {
+        if ($request->hasValidSignature()) {
+            return true;
+        }
+
         if ($request->hasSession() && $request->session()->get('staff_authenticated')) {
+            if ($request->session()->get('staff_role') === 'admin') {
+                return true;
+            }
+
+            $staffProfId = $request->session()->get('staff_professional_id');
+            if (!empty($serviceRequest->professional_id)) {
+                return $serviceRequest->professional_id === $staffProfId;
+            }
+
             return true;
         }
 
         // The app authenticates with a Sanctum bearer token; this route is not
         // behind the sanctum guard, so resolve it explicitly.
         $user = auth('sanctum')->user();
+        if ($user !== null) {
+            if ((int) $serviceRequest->user_id === (int) $user->id) {
+                return true;
+            }
 
-        return $user !== null && (int) $serviceRequest->user_id === (int) $user->id;
+            if ($user->isOperator()) {
+                return true;
+            }
+
+            if ($user->isStaff()) {
+                if (!empty($serviceRequest->professional_id)) {
+                    return $serviceRequest->professional_id === $user->professional_id;
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 }

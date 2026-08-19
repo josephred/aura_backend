@@ -16,7 +16,9 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\LabController;
 use App\Http\Controllers\LabPortalController;
+use App\Http\Controllers\ClinicalMediaController;
 use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\RatingController;
 use App\Http\Controllers\SocialAuthController;
 
 // 0. Authentication (public)
@@ -75,6 +77,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
     Route::get('/bookings/{id}/sse', [BookingController::class, 'streamStatus']);
     Route::get('/bookings/{id}/payment-status', [BookingController::class, 'paymentStatus']);
+    Route::post('/bookings/{id}/rating', [RatingController::class, 'store']);
+    Route::get('/transport/quote', [BookingController::class, 'quoteTransport']);
 
     // 4b. Scheduled Appointments
     Route::get('/appointments', [AppointmentController::class, 'index']);
@@ -100,6 +104,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/lab/results', [LabController::class, 'results']);
     Route::get('/lab/results/{id}/link', [LabController::class, 'resultLink']);
 
+    // 5b. Clinical attachments signed link
+    Route::get('/media/bookings/{bookingId}/{kind}/link', [ClinicalMediaController::class, 'signedLink'])
+        ->where('kind', 'prescription|symptom-audio');
+
     // 6. Clinical History Digital Log
     Route::get('/history', [BookingController::class, 'history']);
 
@@ -117,6 +125,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bookings/{id}/messages', [DoctorDashboardController::class, 'sendMessage']);
         Route::get('/duty', [StaffProfileController::class, 'show']);
         Route::post('/duty', [StaffProfileController::class, 'updateDuty']);
+        Route::get('/profile', [StaffProfileController::class, 'show']);
+        Route::post('/profile', [StaffProfileController::class, 'update']);
 
         // Lab area for the laboratorista working from the phone. Same
         // controller as the web portal, so the scheduling rules exist once.

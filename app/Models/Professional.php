@@ -9,7 +9,40 @@ class Professional extends Model
 {
     public $incrementing = false;
     protected $keyType = 'string';
-    protected $guarded = [];
+
+    /**
+     * Campos asignables masivamente. Campos protegidos contra inyección:
+     * `password`, `role`, `commission_bps`, `rating_avg`, `rating_count`.
+     */
+    protected $fillable = [
+        'id',
+        'user_id',
+        'name',
+        'email',
+        'password',
+        'role',
+        'phone',
+        'specialty',
+        'bio',
+        'consultation_price',
+        'consultation_duration_minutes',
+        'registration_number',
+        'years_of_experience',
+        'coverage_zones',
+        'duty_status',
+        'photo_url',
+        'provides_lab',
+        'active',
+        'rating_avg',
+        'rating_count',
+        'commission_bps',
+        'last_login_at',
+        'rut',
+        'bank_name',
+        'account_type',
+        'account_number',
+        'billing_email',
+    ];
 
     // Never expose account credentials or internal staffing data through API
     // serialization: /api/professionals is a public catalogue, so shift status
@@ -22,6 +55,7 @@ class Professional extends Model
     protected $hidden = [
         'email', 'password', 'role', 'last_login_at',
         'duty_status', 'coverage_zones', 'phone', 'commission_bps',
+        'rut', 'bank_name', 'account_type', 'account_number', 'billing_email',
     ];
 
     protected $casts = [
@@ -30,6 +64,8 @@ class Professional extends Model
         'last_login_at' => 'datetime',
         'years_of_experience' => 'integer',
         'rating_count' => 'integer',
+        'consultation_price' => 'integer',
+        'consultation_duration_minutes' => 'integer',
     ];
 
     /**
@@ -60,5 +96,15 @@ class Professional extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    public function earnings(): HasMany
+    {
+        return $this->hasMany(ProfessionalEarning::class);
+    }
+
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(ProfessionalPayout::class);
     }
 }

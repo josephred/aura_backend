@@ -442,10 +442,23 @@ class DispatchZoneService
     }
 
     /**
-     * Calculates dynamic transport fee based on distance (base rate + price per km).
+     * Calculates dynamic transport fee based on distance and ambulance type.
      */
-    public function calculateTransportFee(float $distanceKm, int $baseFee = 5000, int $pricePerKm = 1200): int
-    {
-        return (int) round($baseFee + ($distanceKm * $pricePerKm));
+    public function calculateTransportFee(
+        float $distanceKm,
+        ?string $ambulanceType = 'basic',
+        ?int $baseFee = null,
+        ?int $pricePerKm = null
+    ): int {
+        $isMedicalized = ($ambulanceType === 'medicalized' || $ambulanceType === 'avanzada');
+
+        $base = $baseFee ?? (int) config(
+            $isMedicalized ? 'aura.transport.base_fee_medicalized' : 'aura.transport.base_fee_basic',
+            $isMedicalized ? 28500 : 18500
+        );
+
+        $perKm = $pricePerKm ?? (int) config('aura.transport.price_per_km', 1200);
+
+        return (int) round($base + ($distanceKm * $perKm));
     }
 }

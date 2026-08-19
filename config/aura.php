@@ -22,6 +22,47 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Recargo de plataforma al paciente
+    |--------------------------------------------------------------------------
+    |
+    | Lo que se suma al precio de catalogo para llegar al importe que paga el
+    | paciente. No es lo mismo que `commission_bps`, que es lo que la plataforma
+    | RETIENE de lo recaudado: uno mira al paciente y el otro al prestador.
+    |
+    | Vivia como `_commissionRate = 0.15` en el cliente Flutter, declarado bajo
+    | el comentario "Simulator Parameters". Es decir: el recargo real que pagaba
+    | la gente era un parametro de simulador cableado en la app, y cambiar la
+    | retencion del servidor no lo movia. 1500 = 15 %, el valor que la app venia
+    | aplicando, para no alterar lo que se cobra hoy.
+    |
+    */
+
+    'patient_surcharge_bps' => (int) env('AURA_PATIENT_SURCHARGE_BPS', 1500),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Traslados
+    |--------------------------------------------------------------------------
+    |
+    | La ambulancia medicalizada es la unica variante con precio propio y no
+    | tiene fila en `clinical_services`: existia solo como constante en el
+    | formulario de la app. Queda aqui hasta que el catalogo sepa representar
+    | variantes de un mismo servicio.
+    |
+    */
+
+    'ambulance' => [
+        'medicalized_price' => (int) env('AURA_AMBULANCE_MEDICALIZED_PRICE', 28500),
+    ],
+
+    'transport' => [
+        'base_fee_basic' => (int) env('AURA_TRANSPORT_BASE_FEE_BASIC', 18500),
+        'base_fee_medicalized' => (int) env('AURA_TRANSPORT_BASE_FEE_MEDICALIZED', 28500),
+        'price_per_km' => (int) env('AURA_TRANSPORT_PRICE_PER_KM', 1200),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Laboratorio
     |--------------------------------------------------------------------------
     */

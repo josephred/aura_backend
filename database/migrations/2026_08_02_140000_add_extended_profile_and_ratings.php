@@ -13,13 +13,13 @@ return new class extends Migration
                 $table->string('registration_number')->nullable()->comment('Registro Superintendencia de Salud');
             }
             if (!Schema::hasColumn('professionals', 'years_of_experience')) {
-                $table->unsignedSmallInteger('years_of_experience')->default(5);
+                $table->unsignedSmallInteger('years_of_experience')->nullable();
             }
             if (!Schema::hasColumn('professionals', 'photo_url')) {
                 $table->string('photo_url')->nullable();
             }
             if (!Schema::hasColumn('professionals', 'rating_avg')) {
-                $table->decimal('rating_avg', 3, 2)->default(5.00);
+                $table->decimal('rating_avg', 3, 2)->nullable();
             }
             if (!Schema::hasColumn('professionals', 'rating_count')) {
                 $table->unsignedInteger('rating_count')->default(0);
@@ -35,6 +35,11 @@ return new class extends Migration
                 $table->unsignedTinyInteger('rating'); // 1 a 5 estrellas
                 $table->text('feedback')->nullable();
                 $table->timestamps();
+
+                $table->unique(['booking_id', 'user_id']);
+                $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+                $table->foreign('booking_id')->references('id')->on('service_requests')->onDelete('cascade');
+                $table->foreign('professional_id')->references('id')->on('professionals')->onDelete('cascade');
             });
         }
     }
@@ -42,5 +47,14 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('service_ratings');
+
+        Schema::table('professionals', function (Blueprint $table) {
+            $columns = ['registration_number', 'years_of_experience', 'photo_url', 'rating_avg', 'rating_count'];
+            foreach ($columns as $column) {
+                if (Schema::hasColumn('professionals', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
+        });
     }
 };

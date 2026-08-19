@@ -21,11 +21,24 @@ class ProfessionalEarning extends Model
         'commission_bps' => 'integer',
         'commission_amount' => 'integer',
         'net_amount' => 'integer',
+        'service_date' => 'datetime',
+        'period_start' => 'date:Y-m-d',
+        'period_end' => 'date:Y-m-d',
         'paid_at' => 'datetime',
     ];
 
     public function professional(): BelongsTo
     {
         return $this->belongsTo(Professional::class);
+    }
+
+    public function payout(): BelongsTo
+    {
+        return $this->belongsTo(ProfessionalPayout::class, 'payout_id');
+    }
+
+    public function serviceRequest(): BelongsTo
+    {
+        return $this->belongsTo(ServiceRequest::class, 'booking_id');
     }
 }

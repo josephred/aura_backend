@@ -118,10 +118,24 @@ class AdminDashboardController extends Controller
         }
 
         $validated = $request->validate([
+            'name' => 'nullable|string|max:150',
+            'specialty' => 'nullable|string|max:150',
+            'bio' => 'nullable|string|max:2000',
+            'registration_number' => 'nullable|string|max:100',
+            'years_of_experience' => 'nullable|integer|min:0|max:80',
+            'phone' => 'nullable|string|max:30',
+            'photo_url' => 'nullable|string|max:1000',
             'duty_status' => 'nullable|string|in:disponible,ocupado,desconectado',
-            'coverage_zones' => 'nullable|string|max:500',
+            'coverage_zones' => 'nullable',
             'active' => 'nullable|boolean',
         ]);
+
+        if (array_key_exists('coverage_zones', $validated) && is_string($validated['coverage_zones'])) {
+            $decoded = json_decode($validated['coverage_zones'], true);
+            $validated['coverage_zones'] = is_array($decoded)
+                ? $decoded
+                : array_map('trim', explode(',', $validated['coverage_zones']));
+        }
 
         $professional->update(array_filter(
             $validated,

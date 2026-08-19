@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\LabResult;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
@@ -11,13 +12,11 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * E.4 — copia del informe de laboratorio al correo registrado del paciente.
+ * E.4 — copia del informe de laboratorio al correo registrado del paciente (REQ-17).
  *
- * El PDF viaja adjunto y no como enlace: un enlace a datos de salud en un
- * correo es exactamente el tipo de URL que termina reenviada. El histórico
- * descargable sigue estando en la app, detrás de la sesión del paciente.
+ * Despachado asíncronamente en colas (ShouldQueue) para no bloquear la respuesta HTTP.
  */
-class LabResultDelivered extends Mailable
+class LabResultDelivered extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -47,10 +46,15 @@ class LabResultDelivered extends Mailable
      */
     public function attachments(): array
     {
-        return [
-            Attachment::fromStorageDisk('local', $this->result->file_path)
-                ->as($this->result->file_name)
-                ->withMime('application/pdf'),
-        ];
+        // Adjuntar si el archivo existe y es menor a 10MB para garantizar entrega
+        if ($this->result->file_path && ($this->result->file_size ?? 0) <= 10 * 1024 * 1024) {
+            return [
+                Attachment::fromStorageDisk('local', $this->result->file_path)
+                    ->as($this->result->file_name)
+                    ->withMime('application/pdf'),
+            ];
+        }
+
+        return [];
     }
 }

@@ -31,3 +31,13 @@ Schedule::command('appointments:send-reminders')->everyFiveMinutes();
 // Abandoned checkouts would otherwise block the patient's only active request
 // slot and distort the zone wait estimates.
 Schedule::command('bookings:expire-unpaid')->everyFiveMinutes();
+
+// Prune expired symptom voice notes from disk retention.
+Schedule::command('aura:prune-symptom-audio')->daily();
+
+// Send immunization milestone push notifications to parents.
+Schedule::command('vaccines:send-age-alerts')->dailyAt('09:00');
+
+// Weekly professional settlements check (every Monday at 03:00).
+Schedule::command('aura:payouts')->weeklyOn(1, '03:00');
+

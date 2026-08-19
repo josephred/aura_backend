@@ -463,7 +463,7 @@ class LabModuleTest extends TestCase
 
         $result = LabResult::firstOrFail();
         Storage::disk('local')->assertExists($result->file_path);
-        Mail::assertSent(LabResultDelivered::class, fn ($mail) => $mail->hasTo('paciente@aura.cl'));
+        Mail::assertQueued(LabResultDelivered::class, fn ($mail) => $mail->hasTo('paciente@aura.cl'));
         $this->assertNotNull($result->fresh()->emailed_at);
 
         // "Mis Exámenes": histórico descargable, sin exponer la ruta interna.

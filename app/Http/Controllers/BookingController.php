@@ -12,6 +12,7 @@ use App\Rules\AtLeastTwoSymptoms;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class BookingController extends Controller
 {
@@ -41,7 +42,19 @@ class BookingController extends Controller
                         (int) config('aura.lab.activation_window_minutes'),
                     ));
             })
-            ->orderByRaw('CASE WHEN is_scheduled = 1 THEN 1 ELSE 0 END')
+            // Las inmediatas primero, las agendadas despues.
+            //
+            // Esto era `orderByRaw('CASE WHEN is_scheduled = 1 ...')`, y en
+            // Postgres —que es lo que corre en produccion, porque config
+            // /database.php cae al default 'pgsql' y el Dockerfile borra
+            // DB_CONNECTION del .env— comparar un boolean con un entero es un
+            // error de tipos: "operator does not exist: boolean = integer".
+            // Este endpoint devolvia 500 siempre, y la app, que solo acepta un
+            // 200, lo interpretaba como "el paciente no tiene atencion activa":
+            // pantalla de chat en blanco y seguimiento vacio con la solicitud
+            // abierta. Los tests no lo veian porque corren en SQLite, donde
+            // `boolean = 1` es valido.
+            ->orderBy('is_scheduled')
             ->first();
 
         return response()->json($active);
@@ -58,20 +71,19 @@ class BookingController extends Controller
             'dependent_id' => 'nullable|string|exists:dependents,id',
             'address_text' => 'required|string',
             'origin_address' => 'nullable|string',
-            'destination_address' => 'nullable|string',
+            'destination_address' => in_array($request->input('service_id'), ['ambulancia', 'traslado_simple', 'traslado_avanzado'], true)
+                ? 'required|string'
+                : 'nullable|string',
             'ambulance_type' => 'nullable|string',
             'patient_lat' => 'nullable|numeric',
             'patient_lng' => 'nullable|numeric',
+            'destination_lat' => 'nullable|numeric',
+            'destination_lng' => 'nullable|numeric',
             // The clinical history is opened from this text, so services that
             // ask for symptoms require at least two of them.
-            'symptoms_description' => [
-                in_array($request->input('service_id'), self::SERVICES_REQUIRING_SYMPTOMS, true)
-                    ? 'required'
-                    : 'nullable',
-                'string',
-                'max:1000',
-                new AtLeastTwoSymptoms(),
-            ],
+            'symptoms_description' => in_array($request->input('service_id'), self::SERVICES_REQUIRING_SYMPTOMS, true)
+                ? ['required', 'string', 'max:1000', new AtLeastTwoSymptoms()]
+                : ['nullable', 'string', 'max:1000'],
             'prescription_name' => 'nullable|string',
             'prescription_preview' => 'nullable|string',
             'prescription_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
@@ -79,7 +91,9 @@ class BookingController extends Controller
             // 5 MB leaves room for other encoders).
             'symptom_audio' => 'nullable|file|mimes:m4a,mp4,aac,mp3,wav,ogg,webm|max:5120',
             'exam_required' => 'nullable|string',
-            'final_price' => 'required|integer',
+            // Se sigue aceptando por compatibilidad con la app instalada, pero
+            // ya no decide nada: el importe se calcula abajo desde el catalogo.
+            'final_price' => 'nullable|integer|min:0',
             'eta_minutes' => 'required|integer',
         ]);
 
@@ -136,6 +150,35 @@ class BookingController extends Controller
         );
         $estimate = $zones->estimate($validated['service_id'], null, $zone);
 
+        // Cálculo de distancia y tarifa georreferenciada para traslados (REQ-11)
+        $distanceKm = null;
+        $transportFee = null;
+        if (
+            isset($validated['patient_lat'], $validated['patient_lng'], $validated['destination_lat'], $validated['destination_lng'])
+        ) {
+            $distanceKm = $zones->calculateDistanceKm(
+                (float) $validated['patient_lat'],
+                (float) $validated['patient_lng'],
+                (float) $validated['destination_lat'],
+                (float) $validated['destination_lng']
+            );
+            $transportFee = $zones->calculateTransportFee($distanceKm, $validated['ambulance_type'] ?? null);
+        }
+
+        // El importe lo fija el servidor.
+        $service = ClinicalService::find($validated['service_id']);
+        $finalPrice = $this->resolvePrice($service, $validated['ambulance_type'] ?? null, $distanceKm);
+
+        if (isset($validated['final_price']) && (int) $validated['final_price'] !== $finalPrice) {
+            Log::warning('El precio enviado por el cliente no coincide con el servidor', [
+                'service_id' => $validated['service_id'],
+                'ambulance_type' => $validated['ambulance_type'] ?? null,
+                'client_price' => (int) $validated['final_price'],
+                'server_price' => $finalPrice,
+                'user_id' => auth()->id(),
+            ]);
+        }
+
         $serviceRequest = ServiceRequest::create([
             'id' => $requestId,
             'user_id' => auth()->id(),
@@ -149,6 +192,10 @@ class BookingController extends Controller
             'ambulance_type' => $validated['ambulance_type'] ?? null,
             'patient_lat' => $validated['patient_lat'] ?? null,
             'patient_lng' => $validated['patient_lng'] ?? null,
+            'destination_lat' => $validated['destination_lat'] ?? null,
+            'destination_lng' => $validated['destination_lng'] ?? null,
+            'distance_km' => $distanceKm,
+            'transport_fee' => $transportFee,
             'symptoms_description' => $validated['symptoms_description'] ?? null,
             // Stored as a private disk path; the model turns it into the
             // authenticated media URL when serialized.
@@ -158,7 +205,7 @@ class BookingController extends Controller
             'prescription_file' => $prescriptionPath,
             'exam_required' => $validated['exam_required'] ?? null,
             'payment_method' => 'mercadopago',
-            'final_price' => $validated['final_price'],
+            'final_price' => $finalPrice,
             'start_time' => $timeStr,
             // Trust the live zone estimate over the static per-service ETA the
             // client sent, but never quote less than the client already saw.
@@ -168,7 +215,6 @@ class BookingController extends Controller
             'current_step' => 0,
         ]);
 
-        $service = ClinicalService::find($validated['service_id']);
         $serviceTitle = $service ? $service->short_title : 'Servicio';
 
         if ($mercadoPago->isConfigured()) {
@@ -200,6 +246,75 @@ class BookingController extends Controller
         $this->activateBooking($serviceRequest, $serviceTitle);
 
         return response()->json($serviceRequest->fresh(), 201);
+    }
+
+    /**
+     * Cotización previa de traslado por georreferenciación (REQ-11).
+     */
+    public function quoteTransport(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'origin_lat' => 'required|numeric',
+            'origin_lng' => 'required|numeric',
+            'destination_lat' => 'required|numeric',
+            'destination_lng' => 'required|numeric',
+            'ambulance_type' => 'nullable|string',
+        ]);
+
+        $zones = app(DispatchZoneService::class);
+        $distanceKm = $zones->calculateDistanceKm(
+            (float) $validated['origin_lat'],
+            (float) $validated['origin_lng'],
+            (float) $validated['destination_lat'],
+            (float) $validated['destination_lng']
+        );
+
+        $ambulanceType = $validated['ambulance_type'] ?? 'basic';
+        $isMedicalized = ($ambulanceType === 'medicalized' || $ambulanceType === 'avanzada');
+        $baseFee = (int) config(
+            $isMedicalized ? 'aura.transport.base_fee_medicalized' : 'aura.transport.base_fee_basic',
+            $isMedicalized ? 28500 : 18500
+        );
+        $pricePerKm = (int) config('aura.transport.price_per_km', 1200);
+        $transportFee = $zones->calculateTransportFee($distanceKm, $ambulanceType);
+
+        $surcharge = intdiv($transportFee * (int) config('aura.patient_surcharge_bps', 1500), 10000);
+        $finalPrice = $transportFee + $surcharge;
+
+        return response()->json([
+            'distance_km' => $distanceKm,
+            'base_fee' => $baseFee,
+            'price_per_km' => $pricePerKm,
+            'transport_fee' => $transportFee,
+            'surcharge' => $surcharge,
+            'final_price' => $finalPrice,
+            'ambulance_type' => $ambulanceType,
+        ]);
+    }
+
+    /**
+     * Importe a cobrar por una prestacion, calculado desde el catalogo o georreferenciación.
+     *
+     * Todo en enteros y en puntos base, como el resto del dinero del proyecto,
+     * para que lo cobrado, lo retenido y lo dispersado cuadren sin flotantes.
+     */
+    private function resolvePrice(?ClinicalService $service, ?string $ambulanceType, ?float $distanceKm = null): int
+    {
+        $base = (int) ($service->base_price ?? 0);
+
+        if ($service !== null && in_array($service->id, ['ambulancia', 'traslado_simple', 'traslado_avanzado'], true)) {
+            if ($distanceKm !== null) {
+                $base = app(DispatchZoneService::class)->calculateTransportFee($distanceKm, $ambulanceType);
+            } elseif ($ambulanceType === 'medicalized' || $ambulanceType === 'avanzada') {
+                $base = (int) config('aura.transport.base_fee_medicalized', 28500);
+            } else {
+                $base = (int) config('aura.transport.base_fee_basic', 18500);
+            }
+        }
+
+        $surcharge = intdiv($base * (int) config('aura.patient_surcharge_bps', 1500), 10000);
+
+        return $base + $surcharge;
     }
 
     /**

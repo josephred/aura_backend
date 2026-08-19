@@ -50,6 +50,89 @@ class StaffProfileController extends Controller
                 : [],
             'completed_today' => $completedToday,
             'open_now' => $openNow,
+            'bio' => $professional?->bio,
+            'registration_number' => $professional?->registration_number,
+            'years_of_experience' => $professional?->years_of_experience,
+            'phone' => $professional?->phone,
+            'photo_url' => $professional?->photo_url,
+            'rating_avg' => $professional?->rating_avg,
+            'rating_count' => $professional?->rating_count ?? 0,
+        ]);
+    }
+
+    /**
+     * Update professional profile/resume (bio, registration number, experience,
+     * phone, photo, coverage zones).
+     */
+    public function update(Request $request, DispatchZoneService $zones): JsonResponse
+    {
+        $professionalId = $this->scopedProfessionalId();
+        $professional = $professionalId ? Professional::find($professionalId) : null;
+
+        if (!$professional) {
+            return response()->json(['error' => 'Sin ficha de profesional asociada'], 403);
+        }
+
+        $validated = $request->validate([
+            'bio' => 'nullable|string|max:2000',
+            'registration_number' => 'nullable|string|max:100',
+            'years_of_experience' => 'nullable|integer|min:0|max:80',
+            'phone' => 'nullable|string|max:30',
+            'coverage_zones' => 'nullable',
+            'photo' => 'nullable|file|image|max:5120',
+            'photo_url' => 'nullable|string|max:1000',
+        ]);
+
+        $attributes = [];
+
+        if (array_key_exists('bio', $validated)) {
+            $attributes['bio'] = $validated['bio'];
+        }
+        if (array_key_exists('registration_number', $validated)) {
+            $attributes['registration_number'] = $validated['registration_number'];
+        }
+        if (array_key_exists('years_of_experience', $validated)) {
+            $attributes['years_of_experience'] = $validated['years_of_experience'];
+        }
+        if (array_key_exists('phone', $validated)) {
+            $attributes['phone'] = $validated['phone'];
+        }
+        if (array_key_exists('coverage_zones', $validated)) {
+            $zonesValue = $validated['coverage_zones'];
+            if (is_array($zonesValue)) {
+                $attributes['coverage_zones'] = implode(', ', array_filter(array_map('trim', $zonesValue)));
+            } elseif (is_string($zonesValue)) {
+                $attributes['coverage_zones'] = $zonesValue;
+            }
+        }
+
+        if ($request->hasFile('photo')) {
+            $path = $request->file('photo')->store('professionals/photos', 'public');
+            $attributes['photo_url'] = '/storage/' . $path;
+        } elseif (array_key_exists('photo_url', $validated)) {
+            $attributes['photo_url'] = $validated['photo_url'];
+        }
+
+        $professional->update($attributes);
+        $professional->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Perfil actualizado correctamente.',
+            'profile' => [
+                'id' => $professional->id,
+                'name' => $professional->name,
+                'specialty' => $professional->specialty,
+                'bio' => $professional->bio,
+                'registration_number' => $professional->registration_number,
+                'years_of_experience' => $professional->years_of_experience,
+                'phone' => $professional->phone,
+                'photo_url' => $professional->photo_url,
+                'coverage_zones' => $zones->zonesCoveredBy($professional),
+                'duty_status' => $professional->duty_status,
+                'rating_avg' => $professional->rating_avg,
+                'rating_count' => $professional->rating_count ?? 0,
+            ],
         ]);
     }
 

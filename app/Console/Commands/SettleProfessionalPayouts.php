@@ -55,9 +55,14 @@ class SettleProfessionalPayouts extends Command
         foreach ($pendingIds as $id) {
             $balance = $settlement->pendingBalance($id);
             $professional = Professional::find($id);
+            $bankInfo = $professional
+                ? ($professional->bank_name ? "{$professional->bank_name} · {$professional->account_type} {$professional->account_number}" : 'Sin datos')
+                : '-';
+
             $rows[] = [
                 $id,
                 $professional?->name ?? '(prestador eliminado)',
+                $bankInfo,
                 $balance['pending_count'],
                 '$' . number_format($balance['gross'], 0, ',', '.'),
                 '$' . number_format($balance['retained'], 0, ',', '.'),
@@ -66,7 +71,7 @@ class SettleProfessionalPayouts extends Command
         }
 
         $this->table(
-            ['Id', 'Prestador', 'Atenciones', 'Bruto', 'Retenido', 'A transferir'],
+            ['Id', 'Prestador', 'Cuenta Bancaria', 'Atenciones', 'Bruto', 'Retenido', 'A transferir'],
             $rows,
         );
 
@@ -90,29 +95,40 @@ class SettleProfessionalPayouts extends Command
         $targets = $all ? $pendingIds->all() : [$professionalId];
 
         foreach ($targets as $id) {
-            $earnings = ProfessionalEarning::where('professional_id', $id)
-                ->where('status', 'pending')
-                ->pluck('id')
-                ->all();
+            $professional = Professional::find($id);
+            if (!$professional) {
+                $this->warn("  $id no existe; se omite.");
+                continue;
+            }
 
-            if ($earnings === []) {
+            $balance = $settlement->pendingBalance($id);
+            if ($balance['pending_count'] === 0) {
                 $this->warn("  $id no tiene saldo pendiente; se omite.");
                 continue;
             }
 
-            $net = $settlement->pendingBalance($id)['pending_net'];
-            $name = Professional::find($id)?->name ?? $id;
+            $net = $balance['pending_net'];
+            $name = $professional->name;
+            $bankDesc = $professional->bank_name ? " [{$professional->bank_name} {$professional->account_number}]" : ' [Sin datos bancarios]';
 
-            // `confirm()` devuelve el valor por defecto cuando la consola no es
-            // interactiva, así que esto no bloquea un cron.
-            if (!$this->confirm('¿Confirmas transferencia de $'
-                . number_format($net, 0, ',', '.') . " a $name?", true)) {
+            if (!$this->confirm("¿Confirmas transferencia de $" . number_format($net, 0, ',', '.') . " a $name$bankDesc?", true)) {
                 $this->line("  $id omitido.");
                 continue;
             }
 
-            $closed = $settlement->markPaid($earnings, $reference);
-            $this->info("  ✓ $name: $closed atención(es) cerradas con la referencia $reference.");
+            // Generar payout formal y marcarlo como pagado
+            $payout = $settlement->createPayout($id, now()->startOfWeek()->subWeek()->toDateString(), now()->endOfWeek()->subWeek()->toDateString());
+            if (!$payout) {
+                // Fallback a payout de todo lo pendiente
+                $payout = $settlement->createPayout($id);
+            }
+
+            if ($payout) {
+                $settlement->markPayoutPaid($payout->id, $reference);
+                $this->info("  ✓ $name: Liquidación #{$payout->id} ({$payout->services_count} atenciones) cerrada con la referencia $reference.");
+            } else {
+                $this->warn("  No se pudo generar la liquidación para $name.");
+            }
         }
 
         return self::SUCCESS;

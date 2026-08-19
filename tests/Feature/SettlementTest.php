@@ -33,6 +33,11 @@ class SettlementTest extends TestCase
             'email' => "$id@aura.cl",
             'password' => Hash::make('clave-segura-123'),
             'role' => 'professional',
+            'rut' => '12.345.678-9',
+            'bank_name' => 'Banco de Chile',
+            'account_type' => 'Corriente',
+            'account_number' => '12345678',
+            'billing_email' => "$id@aura.cl",
         ]);
     }
 
@@ -166,7 +171,7 @@ class SettlementTest extends TestCase
             '--professional' => $professional->id,
             '--reference' => 'TRX-8842',
         ])->expectsConfirmation(
-            '¿Confirmas transferencia de $52.500 a Dra. Camila Rivera?',
+            '¿Confirmas transferencia de $52.500 a Dra. Camila Rivera [Banco de Chile 12345678]?',
             'yes',
         )->assertExitCode(0);
 
@@ -193,5 +198,40 @@ class SettlementTest extends TestCase
         // El segundo intento no vuelve a tocarlo ni pisa la referencia.
         $this->assertSame(0, $settlement->markPaid([$earning->id], 'TRX-2'));
         $this->assertSame('TRX-1', $earning->fresh()->payout_reference);
+    }
+
+    public function test_create_and_settle_formal_payout_with_traceability(): void
+    {
+        $professional = $this->makeProfessional('prof_liquidar');
+        $e1 = $this->makePendingEarning($professional->id, 30000);
+        $e2 = $this->makePendingEarning($professional->id, 50000);
+
+        $settlement = app(\App\Services\SettlementService::class);
+        $payout = $settlement->createPayout($professional->id);
+
+        $this->assertNotNull($payout);
+        $this->assertSame('pending', $payout->status);
+        $this->assertSame(80000, $payout->gross_total);
+        $this->assertSame(2, $payout->services_count);
+        $this->assertSame('Banco de Chile', $payout->bank_snapshot['bank_name']);
+
+        // Idempotencia: segundo createPayout no duplica
+        $payout2 = $settlement->createPayout($professional->id);
+        $this->assertNull($payout2); // Ya no hay devengos sin payout_id
+
+        // Marcar pagado
+        $paid = $settlement->markPayoutPaid($payout->id, 'TRX-LIQ-999');
+        $this->assertTrue($paid);
+
+        $payout->refresh();
+        $this->assertSame('paid', $payout->status);
+        $this->assertSame('TRX-LIQ-999', $payout->payout_reference);
+        $this->assertNotNull($payout->paid_at);
+
+        $e1->refresh();
+        $e2->refresh();
+        $this->assertSame('paid', $e1->status);
+        $this->assertSame('TRX-LIQ-999', $e1->payout_reference);
+        $this->assertSame($payout->id, $e1->payout_id);
     }
 }

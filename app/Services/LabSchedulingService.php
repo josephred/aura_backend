@@ -173,15 +173,27 @@ class LabSchedulingService
      */
     public function remainingFor(LabSchedule $block, Carbon $startsAt, bool $lock = false): int
     {
-        $query = ServiceRequest::where('lab_schedule_id', $block->id)
-            ->where('scheduled_at', $startsAt->format('Y-m-d H:i:s'))
-            ->whereIn('status', self::OCCUPYING_STATUSES);
-
+        // El bloqueo se toma sobre la fila del BLOQUE, no sobre las solicitudes.
+        //
+        // Antes era `$query->lockForUpdate()` seguido de `->count()`, y eso
+        // tenia dos problemas a la vez. Postgres rechaza la combinacion
+        // ("FOR UPDATE is not allowed with aggregate functions"), asi que toda
+        // reserva de laboratorio terminaba en 500 en produccion mientras los
+        // tests pasaban en SQLite, que descarta la clausula de bloqueo al
+        // compilar. Y aunque hubiese funcionado, estaba mal dirigido: bloqueaba
+        // filas de `service_requests` que todavia no existen, de modo que dos
+        // pacientes pidiendo el ultimo cupo contaban cero los dos e insertaban
+        // los dos. La fila del bloque si existe, y serializa a los dos.
         if ($lock) {
-            $query->lockForUpdate();
+            LabSchedule::whereKey($block->id)->lockForUpdate()->first();
         }
 
-        return max(0, $block->capacity - $query->count());
+        $taken = ServiceRequest::where('lab_schedule_id', $block->id)
+            ->where('scheduled_at', $startsAt->format('Y-m-d H:i:s'))
+            ->whereIn('status', self::OCCUPYING_STATUSES)
+            ->count();
+
+        return max(0, $block->capacity - $taken);
     }
 
     /**

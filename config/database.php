@@ -84,14 +84,23 @@ return [
             ]) : [],
         ],
 
+        // Las credenciales de produccion vivian aqui como valores por defecto:
+        // host, base, usuario y contrasena del Postgres de Render, en un
+        // repositorio publico. Ahora los defaults son los de desarrollo, de modo
+        // que un despliegue sin variables de entorno falla al conectar en vez de
+        // entrar en silencio a la base real.
+        //
+        // En Render basta con definir DATABASE_URL (Laravel la parsea y toma
+        // host, puerto, base, usuario y contrasena de ahi); si no, hay que
+        // definir DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME y DB_PASSWORD.
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL', env('DATABASE_PRIVATE_URL', env('DB_URL'))),
-            'host' => env('DB_HOST', 'dpg-d9l754ht0dsc73ftirkg-a.ohio-postgres.render.com'),
+            'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'aura_db_kf5j'),
-            'username' => env('DB_USERNAME', 'aura_db_kf5j_user'),
-            'password' => env('DB_PASSWORD', '7kz0xXFpRmCEITTx75nXP8HeU5iV6rOv'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_USERNAME', 'postgres'),
+            'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
