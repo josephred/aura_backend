@@ -269,7 +269,7 @@ class AppointmentController extends Controller
             // 'error' lets the app report client-side WebRTC failures so
             // they can be diagnosed from the server without adb
             'type' => 'required|string|in:offer,answer,candidate,ready,hangup,error',
-            'payload' => 'nullable',
+            'payload' => 'nullable|max:65535',
         ]);
 
         $appointment = Appointment::where('user_id', auth()->id())->find($id);

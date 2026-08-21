@@ -1,6 +1,6 @@
 FROM php:8.4-cli
 
-# Install system dependencies and PHP extensions (MySQL & PostgreSQL)
+# Install system dependencies and PHP extensions (MySQL & PostgreSQL) + Supervisor
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     libzip-dev \
@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y \
     unzip \
     git \
     curl \
-    && docker-php-ext-install pdo pdo_mysql pdo_pgsql zip
+    supervisor \
+    && docker-php-ext-install pdo pdo_mysql pdo_pgsql zip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -24,18 +26,13 @@ RUN composer install --no-dev --optimize-autoloader
 # Ensure storage subdirectories exist & set permissions
 RUN mkdir -p storage/framework/views storage/framework/sessions storage/framework/cache/data storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 777 storage bootstrap/cache
+    && chmod -R 777 storage bootstrap/cache \
+    && chmod +x docker/entrypoint.sh
 
 # Default port for Render
 ENV PORT=10000
 EXPOSE 10000
 
-# `php artisan serve` atiende UNA petición a la vez salvo que se le den
-# workers, y solo los respeta junto a `--no-reload` (ver ServeCommand). Sin
-# esto, cualquier petición larga —el stream SSE de seguimiento sostiene la
-# conexión hasta 50 s— deja el backend entero congelado para todos los demás:
-# el portal deja de cargar reservas y el mensaje al paciente no llega a
-# guardarse.
 ENV PHP_CLI_SERVER_WORKERS=10
 
-CMD ["sh", "-c", "[ -f .env ] || (cp .env.example .env && sed -i '/^DB_CONNECTION=/d' .env) && php artisan storage:link || true && php artisan key:generate --force && php artisan config:clear && php artisan view:clear && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=$PORT --no-reload"]
+CMD ["/var/www/html/docker/entrypoint.sh"]

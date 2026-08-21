@@ -41,6 +41,7 @@ class DiagnoseDeployment extends Command
         $this->checkDatabase();
         $this->checkAttachments();
         $this->checkIntegrations();
+        $this->checkMailAndBackgroundJobs();
 
         $this->line(str_repeat('─', 60));
 
@@ -112,6 +113,53 @@ class DiagnoseDeployment extends Command
             'k' => $number * 1024,
             default => $number,
         };
+    }
+
+    private function checkMailAndBackgroundJobs(): void
+    {
+        $this->section('Correo, Colas y Scheduler (REQ-17 / A.6)');
+
+        // 1. Mailer
+        $mailer = config('mail.default');
+        if ($mailer === 'log' && app()->environment('production')) {
+            $this->bad(
+                'MAIL_MAILER está configurado como "log" en producción: los correos no se envían a los pacientes.',
+                'Configurar MAIL_MAILER=smtp y las credenciales SMTP en Render.',
+            );
+        } else {
+            $this->ok("Transporte de correo configurado: $mailer");
+        }
+
+        // 2. Colas
+        if (config('queue.default') === 'database') {
+            try {
+                $stalledJobs = DB::table('jobs')
+                    ->where('created_at', '<', now()->subMinutes(10)->timestamp)
+                    ->count();
+
+                if ($stalledJobs > 0) {
+                    $this->bad(
+                        "Hay $stalledJobs trabajo(s) encolados hace más de 10 minutos sin procesar.",
+                        'Verificar que supervisord esté ejecutando php artisan queue:work.',
+                    );
+                } else {
+                    $this->ok('Cola de trabajos saludable (sin tareas atascadas)');
+                }
+            } catch (\Throwable) {
+                $this->warn2('No se pudo inspeccionar la tabla de colas.');
+            }
+        }
+
+        // 3. Scheduler Heartbeat
+        $heartbeat = cache()->get('scheduler_heartbeat');
+        if ($heartbeat === null) {
+            $this->warn2(
+                'No hay registro reciente de ejecución del scheduler (scheduler_heartbeat).',
+                'Asegurar que supervisord ejecute php artisan schedule:work.',
+            );
+        } else {
+            $this->ok("Scheduler activo (último pulso: $heartbeat)");
+        }
     }
 
     // -------------------------------------------------------------- checks

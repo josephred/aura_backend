@@ -168,10 +168,10 @@ class AdminDashboardController extends Controller
             $password = $generated;
         }
 
-        $professional->update([
+        $professional->forceFill([
             'email' => strtolower($validated['email']),
             'password' => Hash::make($password),
-        ]);
+        ])->save();
 
         return response()->json([
             'success' => true,

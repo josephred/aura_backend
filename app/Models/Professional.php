@@ -11,8 +11,7 @@ class Professional extends Model
     protected $keyType = 'string';
 
     /**
-     * Campos asignables masivamente. Campos protegidos contra inyección:
-     * `password`, `role`, `commission_bps`, `rating_avg`, `rating_count`.
+     * Campos asignables masivamente.
      */
     protected $fillable = [
         'id',

@@ -85,6 +85,16 @@ class LabController extends Controller
             'prescription_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
         ]);
 
+        // D.3 — El dependiente debe pertenecer al usuario autenticado
+        if ($validated['patient_type'] === 'dependent' && !empty($validated['dependent_id'])) {
+            $ownsDependent = Dependent::where('id', $validated['dependent_id'])
+                ->where('user_id', auth()->id())
+                ->exists();
+            if (!$ownsDependent) {
+                return response()->json(['error' => 'El dependiente seleccionado no pertenece a tu cuenta'], 403);
+            }
+        }
+
         $service = ClinicalService::find(self::SERVICE_ID);
         if ($service === null) {
             return response()->json(['error' => 'El servicio de laboratorio no está disponible.'], 503);
@@ -351,6 +361,37 @@ class LabController extends Controller
             'professional_name' => $professional?->name,
             'results_count' => LabResult::where('service_request_id', $request->id)->count(),
         ];
+    }
+
+    /**
+     * D.8 (REQ-16) — Permite al paciente actualizar notas clínicas / ayuno antes de la toma.
+     */
+    public function updateNotes(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'clinical_notes' => 'required|string|max:1000',
+        ]);
+
+        $serviceRequest = ServiceRequest::where('user_id', auth()->id())
+            ->where('is_scheduled', true)
+            ->find($id);
+
+        if (!$serviceRequest) {
+            return response()->json(['error' => 'Solicitud de laboratorio no encontrada'], 404);
+        }
+
+        if (in_array($serviceRequest->status, ['in_progress', 'completed', 'cancelled'], true)) {
+            return response()->json(['error' => 'No se pueden editar las indicaciones de una atención en curso o finalizada'], 422);
+        }
+
+        $serviceRequest->update([
+            'clinical_notes' => $validated['clinical_notes'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'clinical_notes' => $serviceRequest->clinical_notes,
+        ]);
     }
 
     /**

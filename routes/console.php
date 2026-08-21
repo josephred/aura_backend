@@ -41,3 +41,15 @@ Schedule::command('vaccines:send-age-alerts')->dailyAt('09:00');
 // Weekly professional settlements check (every Monday at 03:00).
 Schedule::command('aura:payouts')->weeklyOn(1, '03:00');
 
+// Scheduler heartbeat for DiagnoseDeployment health check.
+Schedule::call(function () {
+    cache()->put('scheduler_heartbeat', now()->toIso8601String(), 900);
+})->everyFiveMinutes();
+
+// Daily prune for expired WebRTC video signals older than 24h.
+Schedule::call(function () {
+    \Illuminate\Support\Facades\DB::table('video_signals')
+        ->where('created_at', '<', now()->subHours(24))
+        ->delete();
+})->daily();
+

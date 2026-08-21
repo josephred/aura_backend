@@ -227,12 +227,16 @@ class LabPortalController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:160',
             'notes' => 'nullable|string|max:1000',
-            'file' => 'required|file|mimes:pdf|max:20480',
+            'file' => 'required|file|mimes:pdf|max:10240',
         ]);
 
         $serviceRequest = ServiceRequest::where('is_scheduled', true)->find($id);
         if ($serviceRequest === null) {
             return response()->json(['error' => 'Toma de muestras no encontrada'], 404);
+        }
+
+        if ($serviceRequest->status === 'cancelled') {
+            return response()->json(['error' => 'La solicitud de toma de muestras se encuentra cancelada'], 422);
         }
 
         $scopedId = $this->scopedProfessionalId();
@@ -300,11 +304,24 @@ class LabPortalController extends Controller
             return;
         }
 
+        if (config('mail.default') === 'log' && app()->environment('production')) {
+            $result->update([
+                'emailed_at' => null,
+                'email_error' => 'Sin transporte de correo configurado (MAIL_MAILER=log).',
+            ]);
+            Log::error('Informe de laboratorio no enviado: MAIL_MAILER sin configurar', [
+                'result_id' => $result->id,
+            ]);
+
+            return;
+        }
+
         try {
             Mail::to($user->email)->send(new LabResultDelivered(
                 $result,
                 $user->name ?? 'paciente',
                 $serviceRequest->exam_required,
+                $result->download_url,
             ));
 
             $result->update(['emailed_at' => now(), 'email_error' => null]);

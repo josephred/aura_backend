@@ -23,6 +23,28 @@ class PaymentWebhookController extends Controller
         $type = $request->input('type', $request->input('topic'));
         $paymentId = $request->input('data.id', $request->input('id'));
 
+        if (in_array($type, ['subscription_preapproval', 'preapproval'], true)) {
+            $preapproval = $mercadoPago->getPreapproval((string) $paymentId);
+            if ($preapproval) {
+                $status = $preapproval['status'] ?? 'pending';
+                $extRef = $preapproval['external_reference'] ?? null;
+                $subscription = $extRef
+                    ? \App\Models\UserSubscription::find($extRef)
+                    : \App\Models\UserSubscription::where('mercadopago_preapproval_id', $paymentId)->first();
+
+                if ($subscription) {
+                    $subscription->update([
+                        'status' => $status === 'authorized' ? 'active' : ($status === 'cancelled' ? 'cancelled' : 'pending'),
+                        'mercadopago_preapproval_id' => $preapproval['id'] ?? $subscription->mercadopago_preapproval_id,
+                    ]);
+
+                    return response()->json(['message' => 'subscription updated']);
+                }
+            }
+
+            return response()->json(['message' => 'subscription not found']);
+        }
+
         if ($type !== 'payment' || empty($paymentId)) {
             return response()->json(['message' => 'ignored']);
         }

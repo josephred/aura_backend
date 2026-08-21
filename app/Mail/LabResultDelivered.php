@@ -20,11 +20,15 @@ class LabResultDelivered extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
+    public ?string $downloadUrl;
+
     public function __construct(
         public LabResult $result,
         public string $patientName,
         public ?string $examRequired = null,
+        ?string $downloadUrl = null,
     ) {
+        $this->downloadUrl = $downloadUrl ?? url($result->download_url);
     }
 
     public function envelope(): Envelope
@@ -38,6 +42,9 @@ class LabResultDelivered extends Mailable implements ShouldQueue
     {
         return new Content(
             markdown: 'emails.lab-result',
+            with: [
+                'downloadUrl' => $this->downloadUrl,
+            ],
         );
     }
 

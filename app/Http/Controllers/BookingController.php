@@ -97,6 +97,16 @@ class BookingController extends Controller
             'eta_minutes' => 'required|integer',
         ]);
 
+        // D.3 — El dependiente debe pertenecer al usuario autenticado
+        if ($validated['patient_type'] === 'dependent' && !empty($validated['dependent_id'])) {
+            $ownsDependent = \App\Models\Dependent::where('id', $validated['dependent_id'])
+                ->where('user_id', auth()->id())
+                ->exists();
+            if (!$ownsDependent) {
+                return response()->json(['error' => 'El dependiente seleccionado no pertenece a tu cuenta'], 403);
+            }
+        }
+
         // Fail closed BEFORE touching anything. Further down this method
         // cancels the patient's current request and creates a new row, so a
         // late failure would leave them with their previous request cancelled
@@ -313,8 +323,35 @@ class BookingController extends Controller
         }
 
         $surcharge = intdiv($base * (int) config('aura.patient_surcharge_bps', 1500), 10000);
+        $total = $base + $surcharge;
 
-        return $base + $surcharge;
+        // REQ-13 — Descuentos por suscripción activa
+        $targetUserId = $userId ?? auth()->id();
+        if ($targetUserId) {
+            $subscription = \App\Models\UserSubscription::with('plan')
+                ->where('user_id', $targetUserId)
+                ->where('status', 'active')
+                ->where(function ($q) {
+                    $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
+                ->first();
+
+            if ($subscription && $subscription->plan) {
+                // Si incluye consultas y quedan cupos disponibles
+                if ($subscription->hasRemainingConsultations() && in_array($service?->id, ['medico', 'enfermeria', 'telemedicina', 'kinesiologia'], true)) {
+                    return 0;
+                }
+
+                // Descuento porcentual del plan
+                $discountPercent = $subscription->plan->discount_percentage ?? 0;
+                if ($discountPercent > 0) {
+                    $discountAmount = intdiv($total * $discountPercent, 100);
+                    $total = max(0, $total - $discountAmount);
+                }
+            }
+        }
+
+        return $total;
     }
 
     /**
@@ -330,6 +367,16 @@ class BookingController extends Controller
             $this->activateScheduledBooking($serviceRequest);
 
             return;
+        }
+
+        // Registrar uso de consulta bonificada en la suscripción
+        if ((int) $serviceRequest->final_price === 0) {
+            $subscription = \App\Models\UserSubscription::where('user_id', $serviceRequest->user_id)
+                ->where('status', 'active')
+                ->first();
+            if ($subscription) {
+                $subscription->increment('consultations_used');
+            }
         }
 
         if ($serviceTitle === null) {

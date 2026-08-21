@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -101,7 +102,7 @@ class ClinicalMediaController extends Controller
         // viewer, which cannot carry the bearer token. The signature covers the
         // whole URL, so it grants access to this report and nothing else.
         $signed = $request->hasValidSignature();
-        abort_unless($signed || $this->mayAccessLabResult($request, $serviceRequest), 403);
+        abort_unless($signed || $this->mayAccessLabResult($request, $serviceRequest, $result), 403);
 
         abort_unless(Storage::disk('local')->exists($result->file_path), 404);
 
@@ -123,15 +124,17 @@ class ClinicalMediaController extends Controller
      * que ya está asignada, así que no hay razón para que cualquier prestador
      * del portal pueda descargarlo con solo conocer el id.
      */
-    private function mayAccessLabResult(Request $request, ServiceRequest $serviceRequest): bool
+    private function mayAccessLabResult(Request $request, ServiceRequest $serviceRequest, ?LabResult $result = null): bool
     {
         if ($request->hasSession() && $request->session()->get('staff_authenticated')) {
             if ($request->session()->get('staff_role') === 'admin') {
                 return true;
             }
 
-            return !empty($serviceRequest->professional_id)
-                && $serviceRequest->professional_id === $request->session()->get('staff_professional_id');
+            $staffProfId = $request->session()->get('staff_professional_id');
+
+            return (!empty($serviceRequest->professional_id) && $serviceRequest->professional_id === $staffProfId)
+                || ($result !== null && !empty($result->uploaded_by_professional_id) && $result->uploaded_by_professional_id === $staffProfId);
         }
 
         $user = auth('sanctum')->user();
@@ -158,6 +161,13 @@ class ClinicalMediaController extends Controller
                 return $serviceRequest->professional_id === $staffProfId;
             }
 
+            // D.7 — Guardia: Solicitud aún sin asignar. Se audita el acceso al adjunto clínico.
+            Log::info('Clinical media accessed for unassigned request by staff session', [
+                'staff_id' => $staffProfId,
+                'request_id' => $serviceRequest->id,
+                'ip' => $request->ip(),
+            ]);
+
             return true;
         }
 
@@ -177,6 +187,15 @@ class ClinicalMediaController extends Controller
                 if (!empty($serviceRequest->professional_id)) {
                     return $serviceRequest->professional_id === $user->professional_id;
                 }
+
+                // D.7 — Guardia móvil: solicitud sin asignar.
+                Log::info('Clinical media accessed for unassigned request by staff token', [
+                    'user_id' => $user->id,
+                    'professional_id' => $user->professional_id,
+                    'request_id' => $serviceRequest->id,
+                    'ip' => $request->ip(),
+                ]);
+
                 return true;
             }
         }

@@ -38,8 +38,11 @@ Route::get('/dispatch/eta', [DispatchController::class, 'eta']);
 
 // 1d. Lab collection availability (public: the patient must be able to see
 // which days have slots before deciding to request anything)
-Route::get('/lab/slots', [LabController::class, 'slots']);
-Route::get('/lab/availability', [LabController::class, 'availability']);
+Route::get('/lab/slots', [LabController::class, 'slots'])->middleware('throttle:30,1');
+Route::get('/lab/availability', [LabController::class, 'availability'])->middleware('throttle:30,1');
+
+// 1e. Subscription plans (public catalogue)
+Route::get('/subscriptions/plans', [\App\Http\Controllers\SubscriptionController::class, 'plans']);
 
 // Payment notifications from Mercado Pago (public; payment data is
 // re-fetched server-side so the body cannot be forged)
@@ -49,6 +52,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // 0b. Authenticated session
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
+
+    // 0c. Subscriptions management
+    Route::get('/subscriptions/current', [\App\Http\Controllers\SubscriptionController::class, 'current']);
+    Route::post('/subscriptions/subscribe', [\App\Http\Controllers\SubscriptionController::class, 'subscribe']);
+    Route::post('/subscriptions/cancel', [\App\Http\Controllers\SubscriptionController::class, 'cancel']);
 
     // 2. Family Dependents ABM
     Route::get('/dependents', [DependentController::class, 'index']);
@@ -98,6 +106,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // riding on /bookings.
     Route::get('/lab/requests', [LabController::class, 'index']);
     Route::post('/lab/requests', [LabController::class, 'store']);
+    Route::patch('/lab/requests/{id}/notes', [LabController::class, 'updateNotes']);
     Route::post('/lab/requests/{id}/cancel', [LabController::class, 'cancel']);
     Route::get('/lab/requests/{id}/payment-status', [LabController::class, 'paymentStatus']);
     // "Mis Exámenes": historical, downloadable reports.
