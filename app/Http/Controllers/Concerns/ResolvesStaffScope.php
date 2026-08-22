@@ -31,7 +31,7 @@ trait ResolvesStaffScope
             return session('staff_role') === 'admin';
         }
 
-        $user = auth('sanctum')->user();
+        $user = request()->user() ?? auth('sanctum')->user();
 
         return $user !== null && $user->isOperator();
     }
@@ -50,7 +50,7 @@ trait ResolvesStaffScope
             return session('staff_professional_id');
         }
 
-        return auth('sanctum')->user()?->professional_id;
+        return request()->user()?->professional_id ?? auth('sanctum')->user()?->professional_id;
     }
 
     /**

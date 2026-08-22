@@ -243,13 +243,16 @@ class LabPortalController extends Controller
             ], 409);
         }
 
-        if ($serviceRequest->status === 'cancelled') {
-            return response()->json(['error' => 'La solicitud de toma de muestras se encuentra cancelada'], 422);
-        }
-
         $scopedId = $this->scopedProfessionalId();
         if ($scopedId !== null && $serviceRequest->professional_id !== $scopedId) {
             return response()->json(['error' => 'Sin permiso sobre esta toma'], 403);
+        }
+
+        // Un informe de una muestra que todavía no se tomó no es un informe válido.
+        if (in_array($serviceRequest->status, ['pending', 'pending_payment', 'scheduled', 'cancelled'], true)) {
+            return response()->json([
+                'error' => 'La toma de muestras aún no se ha realizado.',
+            ], 422);
         }
 
         $path = $request->file('file')->store('lab-results', 'local');

@@ -18,7 +18,7 @@ class StaffProfileTest extends TestCase
 
     private function makeProfessional(string $id = 'prof_test'): Professional
     {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => 'Dr. Matías Soto',
             'specialty' => 'Medicina Familiar',
@@ -190,5 +190,52 @@ class StaffProfileTest extends TestCase
         $this->withHeaders(['Authorization' => "Bearer $patientToken"])
             ->postJson('/api/staff/profile', ['bio' => 'Hacker'])
             ->assertStatus(403);
+    }
+
+    public function test_staff_duty_returns_provides_lab_true_for_lab_professionals(): void
+    {
+        $labProf = Professional::forceCreate([
+            'id' => 'prof_duty_lab',
+            'name' => 'TM. Laboratorio Test',
+            'specialty' => 'Tecnología Médica',
+            'consultation_price' => 19500,
+            'consultation_duration_minutes' => 30,
+            'active' => true,
+            'provides_lab' => true,
+        ]);
+        [, $labToken] = $this->staffUser('doctor_provider', $labProf->id);
+
+        $this->withHeaders(['Authorization' => "Bearer $labToken"])
+            ->getJson('/api/staff/duty')
+            ->assertStatus(200)
+            ->assertJsonPath('provides_lab', true);
+    }
+
+    public function test_staff_duty_returns_provides_lab_false_for_non_lab_professionals(): void
+    {
+        $doctorProf = Professional::forceCreate([
+            'id' => 'prof_duty_doc',
+            'name' => 'Dr. General Test',
+            'specialty' => 'Medicina General',
+            'consultation_price' => 25000,
+            'consultation_duration_minutes' => 30,
+            'active' => true,
+            'provides_lab' => false,
+        ]);
+        $docUser = User::create([
+            'name' => 'Dr. General Test',
+            'email' => 'doc_test@aura.cl',
+            'password' => bcrypt('password123'),
+        ]);
+        $docUser->forceFill([
+            'role' => 'doctor_provider',
+            'professional_id' => $doctorProf->id,
+        ])->save();
+        $docToken = $docUser->createToken('doc')->plainTextToken;
+
+        $this->withHeaders(['Authorization' => "Bearer $docToken"])
+            ->getJson('/api/staff/duty')
+            ->assertStatus(200)
+            ->assertJsonPath('provides_lab', false);
     }
 }

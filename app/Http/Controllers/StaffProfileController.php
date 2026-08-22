@@ -21,9 +21,8 @@ class StaffProfileController extends Controller
     public function show(Request $request, DispatchZoneService $zones): JsonResponse
     {
         $user = $request->user();
-        $professional = $this->scopedProfessionalId()
-            ? Professional::find($this->scopedProfessionalId())
-            : null;
+        $profId = $this->scopedProfessionalId() ?? $user?->professional_id;
+        $professional = $profId ? Professional::find($profId) : null;
 
         $completedToday = $professional
             ? ServiceRequest::where('professional_id', $professional->id)
@@ -55,6 +54,7 @@ class StaffProfileController extends Controller
             'years_of_experience' => $professional?->years_of_experience,
             'phone' => $professional?->phone,
             'photo_url' => $professional?->photo_url,
+            'provides_lab' => (bool) ($professional?->provides_lab ?? false),
             'rating_avg' => $professional?->rating_avg,
             'rating_count' => $professional?->rating_count ?? 0,
         ]);
@@ -131,6 +131,7 @@ class StaffProfileController extends Controller
                 'years_of_experience' => $professional->years_of_experience,
                 'phone' => $professional->phone,
                 'photo_url' => $professional->photo_url,
+                'provides_lab' => (bool) $professional->provides_lab,
                 'coverage_zones' => $zones->zonesCoveredBy($professional),
                 'duty_status' => $professional->duty_status,
                 'rating_avg' => $professional->rating_avg,

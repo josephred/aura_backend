@@ -36,10 +36,10 @@ Schedule::command('bookings:expire-unpaid')->everyFiveMinutes();
 Schedule::command('aura:prune-symptom-audio')->daily();
 
 // Send immunization milestone push notifications to parents.
-Schedule::command('vaccines:send-age-alerts')->dailyAt('09:00');
+Schedule::command('vaccines:send-age-alerts')->dailyAt('09:00')->onOneServer();
 
 // Weekly professional settlements check (every Monday at 03:00).
-Schedule::command('aura:payouts')->weeklyOn(1, '03:00');
+Schedule::command('aura:payouts')->weeklyOn(1, '03:00')->onOneServer();
 
 // Scheduler heartbeat for DiagnoseDeployment health check.
 Schedule::call(function () {

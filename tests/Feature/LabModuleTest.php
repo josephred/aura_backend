@@ -453,6 +453,8 @@ class LabModuleTest extends TestCase
             'exam_required' => 'Hemograma completo',
         ])->json();
 
+        ServiceRequest::where('id', $created['id'])->update(['status' => 'en_atencion']);
+
         $this->withSession($this->staffSession($professional))
             ->post("/doctor/api/lab/collections/{$created['id']}/results", [
                 'title' => 'Hemograma completo',
@@ -494,6 +496,8 @@ class LabModuleTest extends TestCase
             'address_text' => 'Av. Providencia 1234',
             'exam_required' => 'Hemograma',
         ])->json();
+
+        ServiceRequest::where('id', $created['id'])->update(['status' => 'en_atencion']);
 
         $this->withSession($this->staffSession($professional))
             ->post("/doctor/api/lab/collections/{$created['id']}/results", [
@@ -545,6 +549,9 @@ class LabModuleTest extends TestCase
             'exam_required' => 'Hemograma',
         ])->json();
 
+        // Se avanza a en_atencion para permitir la subida del informe
+        ServiceRequest::where('id', $created['id'])->update(['status' => 'en_atencion']);
+
         $this->withSession($this->staffSession($mine))
             ->post("/doctor/api/lab/collections/{$created['id']}/results", [
                 'title' => 'Hemograma completo',
@@ -586,7 +593,19 @@ class LabModuleTest extends TestCase
             'exam_required' => 'Perfil Lipídico',
         ])->json();
 
-        // 1. Primera carga exitosa -> 201
+        // 1. Intentar subir en estado 'scheduled' -> Rechazado con 422
+        $this->withSession($this->staffSession($prof))
+            ->post("/doctor/api/lab/collections/{$created['id']}/results", [
+                'title' => 'Perfil Lipídico',
+                'file' => UploadedFile::fake()->create('informe_prematuro.pdf', 120, 'application/pdf'),
+            ])->assertStatus(422)
+            ->assertJsonPath('error', 'La toma de muestras aún no se ha realizado.');
+
+        $this->assertSame(0, LabResult::where('service_request_id', $created['id'])->count());
+
+        // 2. Avanzar a 'en_atencion' y realizar primera carga exitosa -> 201
+        ServiceRequest::where('id', $created['id'])->update(['status' => 'en_atencion']);
+
         $this->withSession($this->staffSession($prof))
             ->post("/doctor/api/lab/collections/{$created['id']}/results", [
                 'title' => 'Perfil Lipídico',
@@ -595,7 +614,7 @@ class LabModuleTest extends TestCase
 
         $this->assertSame(1, LabResult::where('service_request_id', $created['id'])->count());
 
-        // 2. Reenvío accidental del formulario -> 409 Conflict sin duplicar registros ni correos
+        // 3. Reenvío accidental del formulario -> 409 Conflict sin duplicar registros ni correos
         $this->withSession($this->staffSession($prof))
             ->post("/doctor/api/lab/collections/{$created['id']}/results", [
                 'title' => 'Perfil Lipídico Reintento',
