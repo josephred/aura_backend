@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ServiceRequest;
 use App\Models\ClinicalService;
+use App\Jobs\NotifyQueuedRequest;
 use App\Models\ChatMessage;
 use App\Models\PastService;
 use App\Services\DispatchZoneService;
@@ -424,6 +425,14 @@ class BookingController extends Controller
             "Tu solicitud de $serviceTitle fue confirmada. El especialista ya está en coordinación.",
             ['booking_id' => $serviceRequest->id, 'status' => 'accepted'],
         );
+
+        // Y aviso a quien puede ir. Hasta aquí la solicitud entraba en la cola
+        // en silencio: nadie se enteraba hasta que algún profesional refrescara
+        // el portal por su cuenta, así que la velocidad de respuesta dependía
+        // de quién tuviera la pestaña abierta. Va encolado porque este método
+        // corre dentro del callback de pago y no puede quedarse esperando a
+        // FCM.
+        NotifyQueuedRequest::dispatch($serviceRequest->id, 'nueva');
     }
 
     /**

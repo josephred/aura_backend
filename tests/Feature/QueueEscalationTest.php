@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\NotifyQueuedRequest;
 use App\Models\ChatMessage;
 use App\Models\ClinicalService;
 use App\Models\Parametro;
@@ -11,6 +12,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -299,6 +301,25 @@ class QueueEscalationTest extends TestCase
         $this->assertStringContainsString('ampliada fuera de zona', $salida);
         $this->assertStringContainsString('avisado a operaciones', $salida);
         $this->assertStringContainsString('1 a nivel 1, 1 a nivel 2', $salida);
+    }
+
+    public function test_the_level_one_notice_is_queued_and_not_sent_inline(): void
+    {
+        Queue::fake();
+        $this->makeService();
+        $this->makeProfessional('prof_a', ['medico'], 'Providencia');
+        $this->encolar('req_vieja', 20);
+
+        Artisan::call('cola:escalar');
+
+        // El comando corre cada minuto con `withoutOverlapping`: si mandara los
+        // push aqui dentro, un FCM lento se comeria las vueltas siguientes.
+        // Decidir el nivel y enviar son dos oficios distintos.
+        Queue::assertPushed(
+            NotifyQueuedRequest::class,
+            fn (NotifyQueuedRequest $job) => $job->serviceRequestId === 'req_vieja'
+                && $job->motivo === 'escalada',
+        );
     }
 
     public function test_dry_run_reports_without_writing(): void

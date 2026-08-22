@@ -2,13 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\NotifyQueuedRequest;
 use App\Models\ClinicalService;
 use App\Models\Parametro;
 use App\Models\Professional;
 use App\Models\ServiceRequest;
 use App\Services\ClinicalChannel;
-use App\Services\DispatchZoneService;
-use App\Services\FcmService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -42,11 +41,8 @@ class EscalateQueuedRequests extends Command
 
     protected $description = 'Escala las solicitudes de la cola que nadie ha tomado';
 
-    public function handle(
-        DispatchZoneService $zonas,
-        ClinicalChannel $canal,
-        FcmService $push,
-    ): int {
+    public function handle(ClinicalChannel $canal): int
+    {
         $simulacion = (bool) $this->option('dry-run');
 
         $minutosNivel1 = max(1, Parametro::int('cola.escalado_minutos', 15));
@@ -110,18 +106,27 @@ class EscalateQueuedRequests extends Command
             // que hay que ofrecerla fuera de su sector.
             if ($nivelActual < 1) {
                 $nivel1++;
-                $avisados = $this->avisarProfesionales($solicitud, $servicio, $zona, $esperando, $zonas, $push);
+                // Quién recibe el aviso y con qué texto lo decide QueueNotifier,
+                // que es el mismo camino que usa una solicitud recién pagada o
+                // devuelta a la cola. Aquí había una segunda copia del criterio,
+                // y dos copias de "a quién le ofrezco esto" es como acaban
+                // divergiendo sin que nadie lo note.
+                //
+                // Encolado y no en caliente: este comando corre cada minuto y
+                // mandar los push aquí dentro lo dejaría esperando a FCM, con
+                // `withoutOverlapping` saltándose las vueltas siguientes. Lo
+                // que decide el escalado es el nivel; enviar es otro oficio.
+                NotifyQueuedRequest::dispatch($solicitud->id, 'escalada');
 
                 Log::info('Solicitud escalada a nivel 1', [
                     'booking_id' => $solicitud->id,
                     'servicio' => $solicitud->service_id,
                     'zona' => $zona,
                     'esperando_minutos' => $esperando,
-                    'profesionales_avisados' => $avisados,
                 ]);
 
                 $this->line("  {$solicitud->id} ($servicio, $zona): $esperando min, "
-                    . "ampliada fuera de zona, $avisados avisados");
+                    . 'ampliada fuera de zona, aviso encolado');
             }
 
             if ($nivelQueToca < 2) {
@@ -154,45 +159,5 @@ class EscalateQueuedRequests extends Command
             . "(cortes: $minutosNivel1 y $minutosNivel2 min)");
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Avisa a quien puede tomarla ahora que dejó de ser exclusiva de su sector.
-     *
-     * Se avisa a los profesionales del servicio que están en turno. Con
-     * `cola.escalado_zonas_vecinas` desactivado el aviso se limita a los que ya
-     * cubrían la zona, que es a quienes ya les aparecía: sirve para insistir,
-     * no para ampliar.
-     */
-    private function avisarProfesionales(
-        ServiceRequest $solicitud,
-        string $servicio,
-        string $zona,
-        int $esperando,
-        DispatchZoneService $zonas,
-        FcmService $push,
-    ): int {
-        $ampliar = Parametro::bool('cola.escalado_zonas_vecinas', true);
-
-        $candidatos = $ampliar
-            ? Professional::query()
-                ->where('active', true)
-                ->whereIn('duty_status', ['disponible', 'ocupado'])
-                ->whereHas('services', fn ($q) => $q->where('clinical_services.id', $solicitud->service_id))
-                ->get()
-            : $zonas->professionalsForZone($solicitud->service_id, $zona);
-
-        $avisados = 0;
-
-        foreach ($candidatos as $profesional) {
-            $avisados += $push->notifyProfessional(
-                $profesional->id,
-                "Paciente esperando hace $esperando min",
-                "$servicio en $zona sigue sin profesional. Puedes tomarlo desde la cola.",
-                ['booking_id' => $solicitud->id, 'type' => 'cola_escalada'],
-            );
-        }
-
-        return $avisados;
     }
 }

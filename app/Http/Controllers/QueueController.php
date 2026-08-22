@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\NotifyQueuedRequest;
 use App\Models\ClinicalService;
 use App\Models\Parametro;
 use App\Models\Professional;
@@ -98,8 +99,10 @@ class QueueController extends Controller
                 // la ciudad le aparecían a todo el mundo desde el minuto cero,
                 // y quien refrescara primero se las llevaba, que es justo lo
                 // contrario de repartir por sector.
-                if ((int) $solicitud->escalada_nivel < 1
-                    && $this->alguienCubre($solicitud, $zones)) {
+                $ampliada = (int) $solicitud->escalada_nivel >= 1
+                    && Parametro::bool('cola.escalado_zonas_vecinas', true);
+
+                if (!$ampliada && $this->alguienCubre($solicitud, $zones)) {
                     continue;
                 }
 
@@ -245,6 +248,11 @@ class QueueController extends Controller
         $solicitud->refresh();
         $canal->announceRelease($solicitud);
         $this->sincronizarTurno($profesional);
+
+        // Vuelve a estar libre: los demás tienen que enterarse. Sin esto, una
+        // solicitud devuelta se quedaba esperando a que alguien mirara la cola
+        // justo después, que es el caso menos probable de todos.
+        NotifyQueuedRequest::dispatch($solicitud->id, 'devuelta');
 
         \Illuminate\Support\Facades\Log::info('Solicitud devuelta a la cola', [
             'booking_id' => $solicitud->id,
