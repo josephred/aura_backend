@@ -362,6 +362,10 @@
             transition: all 0.25s ease;
             position: relative;
             overflow: hidden;
+            /* `.feed-scroll` es un flex column: sin esto las tarjetas se
+               encogen cuando la lista pasa del alto del contenedor y el
+               contenido de abajo queda recortado por el overflow. */
+            flex-shrink: 0;
         }
 
         .booking-card:hover {
@@ -423,6 +427,93 @@
         .status-badge.en_atencion { background-color: rgba(236, 72, 153, 0.12); color: var(--status-atencion); }
         .status-badge.completed { background-color: rgba(16, 185, 129, 0.12); color: var(--status-completed); }
         .status-badge.cancelled { background-color: rgba(239, 68, 68, 0.12); color: var(--status-cancelled); }
+
+        /* Cola por servicio. Tomar un paciente pasa a ser un acto explicito,
+           asi que la bandeja separa lo que ya es mio de lo que sigue libre. */
+        .feed-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin: 16px 4px 8px;
+        }
+
+        .feed-subheading {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            color: var(--text-secondary);
+            opacity: .75;
+            margin: 8px 6px 6px;
+        }
+
+        .feed-count {
+            background: rgba(245, 158, 11, 0.14);
+            color: var(--status-pending);
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .feed-empty {
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 10px 6px 4px;
+        }
+
+        .wait-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 8px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(59, 130, 246, 0.12);
+            color: var(--status-accepted);
+        }
+
+        .wait-chip.urgente {
+            background: rgba(239, 68, 68, 0.14);
+            color: var(--status-cancelled);
+        }
+
+        .btn-take {
+            width: 100%;
+            margin-top: 10px;
+            padding: 9px 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            background: var(--accent-teal-light);
+            color: #05231F;
+        }
+
+        .btn-take:disabled { opacity: .45; cursor: not-allowed; }
+
+        .cap-chip {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            padding: 4px 10px;
+            white-space: nowrap;
+        }
+
+        .cap-chip.tope {
+            color: var(--status-pending);
+            border-color: rgba(245, 158, 11, 0.45);
+        }
 
         .card-patient {
             font-size: 14px;
@@ -1063,6 +1154,7 @@
                         <div class="pulse-dot"></div>
                         Bandeja de Solicitudes
                     </div>
+                    <div class="cap-chip" id="queue-capacity">Cargando…</div>
                 </div>
                 <div class="feed-scroll" id="booking-list">
                     <!-- Dynamic List Items -->
@@ -1176,7 +1268,7 @@
                         </div>
                         <div class="chat-input-area">
                             <input type="text" class="chat-input" id="chat-text-input" placeholder="Escribe un mensaje al paciente..." onkeypress="handleChatKeyPress(event)">
-                            <button class="chat-send-btn" onclick="sendChatMessage()">
+                            <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">
                                 <svg viewBox="0 0 24 24">
                                     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                                 </svg>
@@ -1228,12 +1320,45 @@
         let locationWatchId = null;
         let lastLocationPostAt = 0;
 
+        // La cola llega aparte: viene agrupada por servicio y con el tiempo de
+        // espera ya calculado en el servidor, para que a quien se atiende
+        // primero no lo decida el reloj de este navegador.
+        let queue = {
+            loaded: false,
+            professional_id: null,
+            casos_abiertos: 0,
+            tope: 1,
+            servicios: [],
+            aviso: null
+        };
+
         // Auto Refresh bookings every 4 seconds
-        setInterval(fetchBookings, 4000);
-        fetchBookings();
+        setInterval(refreshAll, 4000);
+        refreshAll();
+
+        function refreshAll() {
+            return Promise.all([fetchBookings(), fetchQueue()]);
+        }
+
+        function fetchQueue() {
+            return fetch('/doctor/api/queue', { headers: { 'Accept': 'application/json' } })
+                .then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status)))
+                .then(data => {
+                    queue = {
+                        loaded: true,
+                        professional_id: data.professional_id || null,
+                        casos_abiertos: data.casos_abiertos || 0,
+                        tope: data.tope || 1,
+                        servicios: data.servicios || [],
+                        aviso: data.aviso || null
+                    };
+                    renderBookingList();
+                })
+                .catch(err => console.error('Error cargando la cola:', err));
+        }
 
         function fetchBookings() {
-            fetch('/doctor/api/bookings')
+            return fetch('/doctor/api/bookings')
                 .then(res => res.json())
                 .then(data => {
                     bookings = data;
@@ -1256,8 +1381,11 @@
             let completed = 0;
 
             bookings.forEach(b => {
+                // "Pendiente" es ahora lo que sigue en la cola sin dueno. Una
+                // solicitud ya tomada no esta esperando a nadie, y contarla
+                // aqui inflaba el numero que mira el coordinador.
                 if (b.status === 'pending') pending++;
-                else if (b.status === 'accepted') pending++; // assigned is considered accepted
+                else if (b.status === 'accepted' && !b.professional_id) pending++;
                 else if (b.status === 'en_camino') traveling++;
                 else if (b.status === 'en_atencion') active++;
                 else if (b.status === 'completed') completed++;
@@ -1271,17 +1399,27 @@
 
         function renderBookingList() {
             const listContainer = document.getElementById('booking-list');
-            
-            if (bookings.length === 0) {
-                listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px; font-size: 13px;">No hay solicitudes activas en este momento.</div>';
-                return;
-            }
+            const capChip = document.getElementById('queue-capacity');
 
-            // Zone-based dispatch: requests inside the professional's coverage
-            // are shown first; the rest go under a clearly separated heading so
-            // an uncovered comuna is still visible instead of orphaned.
-            const inZone = bookings.filter(b => !b.outside_zone);
-            const outOfZone = bookings.filter(b => b.outside_zone);
+            // Una cuenta de coordinacion no tiene ficha de profesional: no toma
+            // pacientes, mira. Para ella "mias" son todas las que tienen dueno.
+            const soyProfesional = !!queue.professional_id;
+            const mias = bookings.filter(b => soyProfesional
+                ? b.professional_id === queue.professional_id
+                : !!b.professional_id);
+            const alTope = soyProfesional && queue.casos_abiertos >= queue.tope;
+
+            if (capChip) {
+                if (soyProfesional) {
+                    const n = queue.casos_abiertos;
+                    capChip.textContent = 'Llevas ' + n + ' de ' + queue.tope
+                        + (queue.tope === 1 ? ' atención abierta' : ' atenciones abiertas');
+                    capChip.classList.toggle('tope', alTope);
+                } else if (queue.loaded) {
+                    capChip.textContent = 'Vista de coordinación';
+                    capChip.classList.remove('tope');
+                }
+            }
 
             const cardFor = (b) => {
                 const isActive = b.id === selectedBookingId ? 'active' : '';
@@ -1298,11 +1436,18 @@
                     ? `<div class="card-time">🗺️ Zona: ${esc(b.zone)}</div>`
                     : '';
 
+                // `accepted` sin profesional significaba "Asignado" en la
+                // etiqueta, y no lo estaba: seguia en la cola esperando a que
+                // alguien la tomara.
+                const sinDueno = !b.professional_id;
+                const badgeClass = sinDueno ? 'pending' : esc(b.status);
+                const badgeText = sinDueno ? 'En cola' : esc(translateStatus(b.status));
+
                 return `
                     <div class="booking-card ${esc(b.status)} ${isActive}" onclick="selectBooking('${esc(b.id)}')">
                         <div class="card-top">
                             <span class="service-badge">${esc(serviceName)}</span>
-                            <span class="status-badge ${esc(b.status)}">${esc(translateStatus(b.status))}</span>
+                            <span class="status-badge ${badgeClass}">${badgeText}</span>
                         </div>
                         <div class="card-patient">${esc(displayName)}</div>
                         <div class="card-address">📍 ${esc(shortAddress)}</div>
@@ -1312,23 +1457,67 @@
                 `;
             };
 
-            const heading = (text) => `
-                <div style="font-size:10px; font-weight:800; letter-spacing:0.8px; text-transform:uppercase;
-                            color:var(--text-secondary); margin:14px 4px 8px;">${text}</div>`;
+            // Tarjeta de cola: lo que decide si la tomas es el rato que lleva
+            // esperando, asi que va delante y no escondido en el detalle.
+            const queueCard = (f) => {
+                const isActive = f.id === selectedBookingId ? 'active' : '';
+                const urgente = f.escalada || f.esperando_minutos >= 15;
+                const puede = !alTope;
 
-            let html = '';
-            if (outOfZone.length === 0) {
-                html = inZone.map(cardFor).join('');
+                return `
+                    <div class="booking-card accepted ${isActive}" onclick="selectBooking('${esc(f.id)}')">
+                        <div class="card-top">
+                            <span class="service-badge">🗺️ ${esc(f.zona)}</span>
+                            <span class="status-badge pending">En cola</span>
+                        </div>
+                        <div class="card-patient">${esc(f.paciente)}</div>
+                        <div class="card-address">📍 ${esc(f.direccion || 'Dirección no especificada')}</div>
+                        <div class="wait-chip ${urgente ? 'urgente' : ''}">⏳ Esperando ${esc(f.esperando_minutos)} min</div>
+                        <button class="btn-take" ${puede ? '' : 'disabled'}
+                                onclick="event.stopPropagation(); claimBooking('${esc(f.id)}')">
+                            ${puede ? '🙋 Tomar paciente' : 'Al tope de atenciones'}
+                        </button>
+                    </div>
+                `;
+            };
+
+            const heading = (text, count) => `
+                <div class="feed-heading">
+                    <span>${esc(text)}</span>
+                    ${count ? `<span class="feed-count">${esc(count)}</span>` : ''}
+                </div>`;
+
+            const subheading = (text) => `<div class="feed-subheading">${esc(text)}</div>`;
+            const nota = (text) => `<div class="feed-empty">${esc(text)}</div>`;
+
+            let html = heading(soyProfesional ? 'Mis atenciones' : 'Atenciones asignadas', mias.length);
+            html += mias.length
+                ? mias.map(cardFor).join('')
+                : nota(soyProfesional
+                    ? 'No tienes atenciones tomadas. Toma una de la cola para empezar.'
+                    : 'Ninguna solicitud tiene profesional asignado todavía.');
+
+            if (queue.aviso) {
+                html += heading('Cola de pacientes', 0) + nota(queue.aviso);
+            } else if (!queue.servicios.length) {
+                html += heading('Cola de pacientes', 0)
+                    + nota(queue.loaded
+                        ? 'No hay pacientes esperando en tus servicios.'
+                        : 'Cargando la cola…');
             } else {
-                if (inZone.length) {
-                    html += heading('En tu zona') + inZone.map(cardFor).join('');
-                }
-                html += heading(`Fuera de tu zona (${outOfZone.length})`)
-                    + `<div style="font-size:11px; color:var(--text-secondary); margin:0 4px 8px;">
-                           Puedes tomarlas si nadie del sector responde.
-                       </div>`
-                    + outOfZone.map(cardFor).join('');
+                queue.servicios.forEach(s => {
+                    html += heading(s.titulo, s.esperando);
+                    if (s.en_mi_zona.length) {
+                        html += subheading('En tu zona');
+                        html += s.en_mi_zona.map(queueCard).join('');
+                    }
+                    if (s.fuera_de_zona.length) {
+                        html += subheading('Fuera de tu zona (' + s.fuera_de_zona.length + ') — puedes tomarlas si nadie del sector responde');
+                        html += s.fuera_de_zona.map(queueCard).join('');
+                    }
+                });
             }
+
             listContainer.innerHTML = html;
         }
 
@@ -1371,6 +1560,11 @@
                     if (bookingId !== selectedBookingId) return;
                     const b = bookings.find(x => x.id === bookingId);
                     if (b && ['completed', 'cancelled', 'pending', 'pending_payment'].includes(b.status)) return;
+                    // Solo se transmite la posicion de una atencion ya tomada.
+                    // Sin esta comprobacion, seleccionar una tarjeta de la cola
+                    // para leerla emitia GPS contra ella y el servidor la
+                    // asignaba en silencio a quien solo estaba mirando.
+                    if (!b || !b.professional_id) return;
 
                     // Throttle to at most one post every 4 seconds
                     const now = Date.now();
@@ -1476,45 +1670,93 @@
             const btnWrapper = document.getElementById('actions-button-wrapper');
             let btnHtml = '';
 
-            if (b.status === 'pending') {
+            // Sin dueno no hay estado que avanzar: el servidor responde 409 a
+            // cualquier otra cosa. El boton refleja lo que de verdad se puede
+            // hacer en vez de fallar recien al pulsarlo.
+            const enCola = !b.professional_id;
+            const soyProfesional = !!queue.professional_id;
+
+            if (enCola && soyProfesional) {
                 btnHtml = `
-                    <button class="btn btn-primary" onclick="changeBookingStatus('${b.id}', 'accepted')">
-                        🤝 Aceptar Atención Clínica
+                    <button class="btn btn-primary" onclick="claimBooking('${esc(b.id)}')">
+                        🙋 Tomar esta atención
                     </button>
+                    <div style="font-size:11px; color:var(--text-secondary); margin-top:8px;">
+                        Hasta que la tomes no puedes avanzar el estado ni escribirle al paciente.
+                    </div>
                 `;
-            } else if (b.status === 'accepted') {
-                btnHtml = `
-                    <button class="btn btn-primary" onclick="changeBookingStatus('${b.id}', 'en_camino')">
-                        🚗 Iniciar Ruta de Viaje
-                    </button>
-                `;
-            } else if (b.status === 'en_camino') {
-                btnHtml = `
-                    <button class="btn btn-primary" onclick="changeBookingStatus('${b.id}', 'en_atencion')">
-                        🩺 Llegar e Iniciar Consulta
-                    </button>
-                `;
-            } else if (b.status === 'en_atencion') {
-                btnHtml = `
-                    <button class="btn btn-success" onclick="changeBookingStatus('${b.id}', 'completed')">
-                        ✅ Finalizar Consulta Médica
-                    </button>
-                `;
-            } else if (b.status === 'completed') {
-                btnHtml = `
-                    <button class="btn btn-secondary" disabled>
-                        Atención Finalizada
-                    </button>
-                `;
-            } else if (b.status === 'cancelled') {
-                btnHtml = `
-                    <button class="btn btn-secondary" style="color: var(--status-cancelled); border-color: var(--status-cancelled);" disabled>
-                        Atención Cancelada por el Paciente
+            } else {
+                if (b.status === 'pending') {
+                    btnHtml = `
+                        <button class="btn btn-primary" onclick="changeBookingStatus('${esc(b.id)}', 'accepted')">
+                            🤝 Aceptar Atención Clínica
+                        </button>
+                    `;
+                } else if (b.status === 'accepted') {
+                    btnHtml = `
+                        <button class="btn btn-primary" onclick="changeBookingStatus('${esc(b.id)}', 'en_camino')">
+                            🚗 Iniciar Ruta de Viaje
+                        </button>
+                    `;
+                } else if (b.status === 'en_camino') {
+                    btnHtml = `
+                        <button class="btn btn-primary" onclick="changeBookingStatus('${esc(b.id)}', 'en_atencion')">
+                            🩺 Llegar e Iniciar Consulta
+                        </button>
+                    `;
+                } else if (b.status === 'en_atencion') {
+                    btnHtml = `
+                        <button class="btn btn-success" onclick="changeBookingStatus('${esc(b.id)}', 'completed')">
+                            ✅ Finalizar Consulta Médica
+                        </button>
+                    `;
+                } else if (b.status === 'completed') {
+                    btnHtml = `
+                        <button class="btn btn-secondary" disabled>
+                            Atención Finalizada
+                        </button>
+                    `;
+                } else if (b.status === 'cancelled') {
+                    btnHtml = `
+                        <button class="btn btn-secondary" style="color: var(--status-cancelled); border-color: var(--status-cancelled);" disabled>
+                            Atención Cancelada por el Paciente
+                        </button>
+                    `;
+                }
+
+                if (enCola) {
+                    btnHtml += `
+                        <div style="font-size:11px; color:var(--text-secondary); margin-top:8px;">
+                            Nadie la ha tomado todavía. Avanzarla desde coordinación no le asigna profesional.
+                        </div>
+                    `;
+                }
+            }
+
+            // Soltar solo tiene sentido antes de llegar al domicilio: una vez
+            // dentro se cierra o se cancela, que son actos distintos.
+            if (!enCola && soyProfesional && ['accepted', 'en_camino'].includes(b.status)) {
+                btnHtml += `
+                    <button class="btn btn-secondary" style="margin-top:8px;" onclick="releaseBooking('${esc(b.id)}')">
+                        ↩️ Devolver a la cola
                     </button>
                 `;
             }
 
             btnWrapper.innerHTML = btnHtml;
+
+            // El canal de chat exige lo mismo que exige el servidor: escribirle
+            // al paciente antes de tomarlo devolvia 409 y el texto se perdia.
+            const chatInput = document.getElementById('chat-text-input');
+            const chatSend = document.getElementById('chat-send-btn');
+            const puedeEscribir = !enCola || !soyProfesional;
+            if (chatInput) {
+                chatInput.disabled = !puedeEscribir;
+                chatInput.placeholder = puedeEscribir
+                    ? 'Escribe un mensaje al paciente...'
+                    : 'Toma la atención para poder escribirle.';
+            }
+            if (chatSend) chatSend.disabled = !puedeEscribir;
 
             // Map Simulation setup
             const mapSection = document.getElementById('map-section-wrapper');
@@ -1536,13 +1778,70 @@
                 },
                 body: JSON.stringify({ status: newStatus })
             })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    fetchBookings();
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                // Un 409 ("toma la solicitud antes de avanzar su estado") venia
+                // resolviendo la promesa y no pasaba nada: el profesional
+                // pulsaba, no veia error, y creia que habia avanzado.
+                if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+                return refreshAll();
+            })
+            .catch(err => {
+                console.error("Error updating status:", err);
+                alert(err.message);
+            });
+        }
+
+        // Tomar y soltar son actos explicitos. El servidor resuelve la toma con
+        // un UPDATE condicionado a que siga libre, asi que dos profesionales
+        // pulsando a la vez no se pisan: el segundo recibe 409 y se entera.
+        function claimBooking(id) {
+            fetch(`/doctor/api/bookings/${id}/claim`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 }
             })
-            .catch(err => console.error("Error updating status:", err));
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+                selectedBookingId = id;
+                return refreshAll();
+            })
+            // Recien tomada se abre en el detalle: es el momento en que el
+            // profesional necesita la direccion y el chat, no un clic despues.
+            .then(() => selectBooking(id))
+            .catch(err => alert(err.message));
+        }
+
+        function releaseBooking(id) {
+            const ok = confirm('¿Devolver esta atención a la cola? El paciente verá que sigue esperando y otro profesional podrá tomarla.');
+            if (!ok) return;
+
+            fetch(`/doctor/api/bookings/${id}/release`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            })
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+
+                if (selectedBookingId === id) {
+                    selectedBookingId = null;
+                    clearInterval(chatPollTimer);
+                    stopLocationBroadcast();
+                    document.getElementById('detail-workspace-state').style.display = 'none';
+                    document.getElementById('empty-detail-state').style.display = 'flex';
+                }
+                return refreshAll();
+            })
+            .catch(err => alert(err.message));
         }
 
         // Live Chat Fetching

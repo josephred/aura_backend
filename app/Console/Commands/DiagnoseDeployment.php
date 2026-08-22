@@ -42,6 +42,7 @@ class DiagnoseDeployment extends Command
         $this->checkAttachments();
         $this->checkIntegrations();
         $this->checkMailAndBackgroundJobs();
+        $this->checkProfessionalServices();
 
         $this->line(str_repeat('─', 60));
 
@@ -88,6 +89,46 @@ class DiagnoseDeployment extends Command
         if ($fix !== '') {
             $this->line("      <fg=gray>→ $fix</>");
         }
+    }
+
+    /**
+     * Profesionales activos que no pueden recibir ni una solicitud.
+     *
+     * La habilitacion por servicio vive ahora en `professional_service`. Un
+     * profesional sin filas ahi es invisible para el despacho, y el sintoma
+     * —"no me llega nada"— tarda dias en llegar a quien puede arreglarlo. Este
+     * chequeo lo pone por delante.
+     */
+    private function checkProfessionalServices(): void
+    {
+        $this->section('Habilitacion por servicio');
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('professional_service')) {
+            $this->warn2(
+                'La tabla professional_service no existe.',
+                'Ejecutar php artisan migrate.',
+            );
+
+            return;
+        }
+
+        $huerfanos = \App\Models\Professional::query()
+            ->where('active', true)
+            ->whereDoesntHave('services')
+            ->pluck('name', 'id');
+
+        if ($huerfanos->isEmpty()) {
+            $this->ok('Todos los profesionales activos tienen al menos un servicio asignado.');
+
+            return;
+        }
+
+        $this->warn2(
+            'Profesionales activos sin ningun servicio asignado (' . $huerfanos->count() . '): '
+                . $huerfanos->map(fn ($nombre, $id) => "$nombre [$id]")->implode(', ')
+                . '. No recibiran solicitudes.',
+            'Asignar sus servicios desde el panel, o con php artisan staff:account --services=<ids>.',
+        );
     }
 
     private function section(string $title): void

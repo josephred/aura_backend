@@ -35,9 +35,13 @@ class StaffApiTest extends TestCase
         ]);
     }
 
+    /**
+     * Crea el profesional y lo habilita en el catalogo existente. Sin filas en
+     * `professional_service` no puede tomar nada.
+     */
     private function makeProfessional(string $id = 'prof_api'): Professional
     {
-        return Professional::create([
+        $prof = Professional::create([
             'id' => $id,
             'name' => 'Dra. API',
             'specialty' => 'Medicina General',
@@ -47,6 +51,10 @@ class StaffApiTest extends TestCase
             'duty_status' => 'disponible',
             'coverage_zones' => 'Providencia',
         ]);
+
+        $prof->services()->sync(ClinicalService::pluck('id')->all());
+
+        return $prof;
     }
 
     private function staffUser(string $role, ?string $professionalId): array
@@ -145,6 +153,11 @@ class StaffApiTest extends TestCase
         $booking = $this->makeBooking('req_flow', 'Providencia');
 
         $headers = ['Authorization' => "Bearer $token"];
+
+        // Primero se toma; avanzar el estado ya no asigna por si solo.
+        $this->withHeaders($headers)
+            ->postJson("/api/staff/bookings/{$booking->id}/claim")
+            ->assertStatus(200);
 
         foreach (['en_camino', 'en_atencion', 'completed'] as $status) {
             $this->withHeaders($headers)

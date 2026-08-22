@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ClinicalService;
+use App\Models\Parametro;
 use App\Models\Professional;
 use App\Models\ServiceRequest;
 use Illuminate\Support\Facades\Cache;
@@ -51,17 +52,12 @@ class DispatchZoneService
      * Which professional specialties can serve each clinical service.
      * Matching is done case- and accent-insensitively on a normalized string.
      */
-    private const SERVICE_SPECIALTIES = [
-        'medico' => ['medicina', 'medico'],
-        'enfermeria' => ['enfermeria'],
-        'kine_motora' => ['kinesiologia'],
-        'kine_respiratoria' => ['kinesiologia'],
-        'cuidados' => ['enfermeria', 'cuidados'],
-        'laboratorio' => ['enfermeria', 'laboratorio'],
-        'electrocardiograma' => ['enfermeria', 'medicina'],
-        'radiologia' => ['radiologia', 'imagenologia'],
-        'ambulancia' => ['ambulancia', 'paramedico'],
-    ];
+    // Aqui vivia SERVICE_SPECIALTIES: un mapa de servicio a subcadenas que se
+    // comparaba contra `professionals.specialty`, texto libre. Quien estuviera
+    // dado de alta como "Kinesiologo" en vez de "Kinesiologia" no recibia una
+    // sola solicitud, sin error ni log. Ahora la habilitacion es una fila en
+    // `professional_service`; el mapa se uso una ultima vez en la migracion
+    // 2026_08_22_100000 para no perder las asignaciones existentes.
 
     /**
      * Zone for a request, preferring the typed address and falling back to
@@ -234,12 +230,22 @@ class DispatchZoneService
         $onDuty = $this->professionalsForZone($serviceId, $zone)->count();
         $free = $this->professionalsForZone($serviceId, $zone, onlyFree: true)->count();
 
-        // Each professional can only take one visit at a time. Every batch that
-        // does not fit in the current shift waits a full extra service cycle.
-        // ceil (not floor): with 2 on shift and 3 open requests the third
-        // patient really does wait another round — rounding down would announce
-        // "alta demanda" while quoting the same time as an empty zone.
-        $capacity = max(1, $onDuty);
+        // Cuántas atenciones puede llevar a la vez un profesional. Este número
+        // era un 1 implícito: el comentario original decía "each professional
+        // can only take one visit at a time" y la fórmula lo daba por hecho. Al
+        // permitir varias, la capacidad de la zona deja de ser el número de
+        // profesionales y el estimador anunciaría esperas que no van a ocurrir.
+        //
+        // Por defecto sigue siendo 1, así que el cálculo no cambia hasta que
+        // alguien suba el parámetro desde el panel.
+        $porProfesional = max(1, Parametro::int('cola.casos_por_profesional', 1));
+
+        // Cada tanda que no cabe en el turno actual espera un ciclo completo de
+        // servicio. ceil y no floor: con capacidad para 2 y 3 solicitudes
+        // abiertas, el tercer paciente sí espera otra vuelta — redondear hacia
+        // abajo anunciaría "alta demanda" cotizando el mismo tiempo que una
+        // zona vacía.
+        $capacity = max(1, $onDuty * $porProfesional);
         $overflow = max(0, $waiting + $inProgress - $capacity);
         $penalty = (int) ceil($overflow / $capacity) * $baseMin;
 
@@ -283,30 +289,16 @@ class DispatchZoneService
      */
     public function professionalsForZone(string $serviceId, string $zone, bool $onlyFree = false)
     {
-        $specialties = self::SERVICE_SPECIALTIES[$serviceId] ?? [];
-
         return Professional::query()
             ->where('active', true)
             ->whereIn('duty_status', $onlyFree ? ['disponible'] : ['disponible', 'ocupado'])
+            ->whereHas('services', fn ($query) => $query->where('clinical_services.id', $serviceId))
             ->get()
-            ->filter(function (Professional $professional) use ($specialties, $zone) {
-                if ($specialties !== []) {
-                    $haystack = $this->normalize($professional->specialty ?? '');
-                    $matches = false;
-                    foreach ($specialties as $specialty) {
-                        if (str_contains($haystack, $this->normalize($specialty))) {
-                            $matches = true;
-                            break;
-                        }
-                    }
-                    if (!$matches) {
-                        return false;
-                    }
-                }
-
-                // Single source of truth for coverage, shared with the portal.
-                return $this->covers($professional, $zone);
-            })
+            // La cobertura de zona se resuelve en PHP y no en SQL porque
+            // `coverage_zones` es una lista separada por comas que hay que
+            // normalizar (acentos, mayusculas) antes de comparar. Es el mismo
+            // criterio que usa el portal, y vive en un solo sitio.
+            ->filter(fn (Professional $professional) => $this->covers($professional, $zone))
             ->values();
     }
 

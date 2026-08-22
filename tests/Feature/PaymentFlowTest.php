@@ -134,14 +134,25 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(1, $booking->current_step);
         $this->assertSame('approved', $booking->payment_status);
         $this->assertSame('999', $booking->payment_id);
-        $this->assertDatabaseCount('chat_messages', 2);
+
+        // Un solo mensaje de apertura, y del sistema.
+        //
+        // Eran dos: el segundo iba firmado como 'provider' y decia "soy el
+        // especialista asignado ... me dirijo hacia tu ubicacion" mientras
+        // `professional_id` seguia en null y nadie habia tomado la solicitud.
+        // La presentacion la hace ahora quien la toma de verdad, con su nombre.
+        $this->assertDatabaseCount('chat_messages', 1);
+
+        $opening = \App\Models\ChatMessage::where('service_request_id', $booking->id)->first();
+        $this->assertSame('system', $opening->sender);
+        $this->assertStringNotContainsString('me dirijo hacia tu ubicaci', $opening->text);
 
         // Webhook is idempotent: replaying it must not duplicate chat messages
         $this->postJson('/api/webhooks/mercadopago', [
             'type' => 'payment',
             'data' => ['id' => '999'],
         ])->assertStatus(200);
-        $this->assertDatabaseCount('chat_messages', 2);
+        $this->assertDatabaseCount('chat_messages', 1);
     }
 
     public function test_forged_webhook_cannot_approve_booking(): void

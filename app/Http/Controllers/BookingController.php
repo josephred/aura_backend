@@ -404,13 +404,19 @@ class BookingController extends Controller
             'timestamp' => $timeStr,
         ]);
 
-        ChatMessage::create([
-            'id' => ChatMessage::nextId('m2'),
-            'service_request_id' => $serviceRequest->id,
-            'sender' => 'provider',
-            'text' => "Hola, soy el especialista asignado para tu atención de $serviceTitle. Ya estoy coordinando los insumos médicos necesarios y me dirijo hacia tu ubicación. ¿Hay algún detalle adicional que deba saber del paciente?",
-            'timestamp' => $timeStr,
-        ]);
+        // Aqui iba un segundo mensaje firmado como 'provider' que decia
+        // "soy el especialista asignado ... me dirijo hacia tu ubicacion".
+        //
+        // Lo escribia el servidor al activar la reserva, cuando
+        // `professional_id` todavia era null y nadie la habia tomado. El
+        // paciente leia que alguien venia en camino en el mismo segundo en que
+        // el mensaje de arriba le decia que su solicitud seguia en la cola, y
+        // el panel del portal marcaba cero trayectos activos. Ademas iba sin
+        // `sender_name`, asi que aparecia como un profesional sin nombre, y
+        // hacia una pregunta que nadie estaba esperando responder.
+        //
+        // La presentacion la hace ahora quien de verdad toma la atencion, con
+        // su nombre: ver DoctorDashboardController::announceAssignment().
 
         app(FcmService::class)->notifyUser(
             $serviceRequest->user_id,

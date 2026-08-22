@@ -79,6 +79,29 @@ class Professional extends Model
             : null;
     }
 
+    /**
+     * Servicios del catalogo que este profesional puede atender.
+     *
+     * Reemplaza al mapeo por subcadenas contra `specialty` que vivia en
+     * DispatchZoneService: aquello dejaba invisible para el despacho a
+     * cualquiera cuyo texto no coincidiera, sin ningun aviso.
+     */
+    public function services(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            ClinicalService::class,
+            'professional_service',
+            'professional_id',
+            'service_id',
+        )->withTimestamps();
+    }
+
+    /** True si puede atender el servicio indicado. */
+    public function attends(string $serviceId): bool
+    {
+        return $this->services()->where('clinical_services.id', $serviceId)->exists();
+    }
+
     /** Bloques de toma de muestras publicados por este prestador. */
     public function labSchedules(): HasMany
     {

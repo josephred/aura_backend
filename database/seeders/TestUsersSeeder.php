@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Dependent;
+use App\Models\ClinicalService;
 use App\Models\Professional;
 use App\Models\SavedAddress;
 use App\Models\User;
@@ -85,6 +86,11 @@ class TestUsersSeeder extends Seeder
             'role' => 'professional',
         ])->save();
 
+        // Guardia medica: sin esto no aparece en la cola de ningun servicio.
+        $prof1->services()->syncWithoutDetaching(
+            ClinicalService::whereIn('id', ['medico', 'electrocardiograma'])->pluck('id')->all()
+        );
+
         // Laboratorista de prueba (Módulo E). Es una cuenta aparte porque la
         // toma de muestras se agenda contra bloques publicados por alguien
         // habilitado con `provides_lab`, no contra la guardia médica.
@@ -103,6 +109,11 @@ class TestUsersSeeder extends Seeder
             'password' => Hash::make(self::PASSWORD),
             'role' => 'professional',
         ])->save();
+
+        // Solo laboratorio: es la cuenta con la que se prueba esa seccion.
+        $prof2->services()->syncWithoutDetaching(
+            ClinicalService::whereIn('id', ['laboratorio'])->pluck('id')->all()
+        );
 
         // Su contraparte en la app, para que pueda trabajar desde el teléfono.
         $labUser = User::updateOrCreate(['id' => 15], [

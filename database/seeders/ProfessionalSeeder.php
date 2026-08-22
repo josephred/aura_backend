@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\ClinicalService;
 use App\Models\Professional;
 use App\Models\ProfessionalSchedule;
 use Illuminate\Database\Seeder;
@@ -95,8 +96,16 @@ class ProfessionalSeeder extends Seeder
             $schedule = $data['schedule'];
             unset($data['schedule']);
 
+            $servicios = $data['services'] ?? $this->serviciosPorEspecialidad($data['specialty'] ?? '');
+            unset($data['services']);
+
             $prof = Professional::find($data['id']) ?? new Professional(['id' => $data['id']]);
             $prof->forceFill($data + ['active' => true])->save();
+
+            // Sin filas en `professional_service` el despacho no le manda nada.
+            $prof->services()->syncWithoutDetaching(
+                ClinicalService::whereIn('id', $servicios)->pluck('id')->all()
+            );
 
             ProfessionalSchedule::where('professional_id', $data['id'])->delete();
             foreach ($schedule as [$day, $start, $end]) {
@@ -108,5 +117,31 @@ class ProfessionalSeeder extends Seeder
                 ]);
             }
         }
+    }
+
+    /**
+     * Servicios que corresponden a una especialidad escrita a mano.
+     *
+     * El catalogo real vive en `professional_service`; esto solo sirve para
+     * sembrar datos de ejemplo sin tener que enumerarlos uno por uno.
+     *
+     * @return array<int, string>
+     */
+    private function serviciosPorEspecialidad(string $especialidad): array
+    {
+        $texto = mb_strtolower(strtr($especialidad, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n',
+        ]));
+
+        return match (true) {
+            str_contains($texto, 'medicina') || str_contains($texto, 'medico')
+                => ['medico', 'electrocardiograma'],
+            str_contains($texto, 'kinesiolog') => ['kine_motora', 'kine_respiratoria'],
+            str_contains($texto, 'enfermer') => ['enfermeria', 'cuidados', 'laboratorio'],
+            str_contains($texto, 'radiolog') || str_contains($texto, 'imagenolog') => ['radiologia'],
+            str_contains($texto, 'paramedic') || str_contains($texto, 'ambulancia') => ['ambulancia'],
+            str_contains($texto, 'laboratorio') || str_contains($texto, 'tecnologia') => ['laboratorio'],
+            default => [],
+        };
     }
 }

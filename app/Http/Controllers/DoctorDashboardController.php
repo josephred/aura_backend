@@ -50,19 +50,6 @@ class DoctorDashboardController extends Controller
     }
 
     /**
-     * Acting on an unassigned request claims it for the acting professional.
-     * Admins coordinate but never take the visit themselves.
-     */
-    private function claimIfUnassigned(ServiceRequest $serviceRequest): void
-    {
-        $professionalId = $this->scopedProfessionalId();
-
-        if (empty($serviceRequest->professional_id) && $professionalId && !$this->isAdmin()) {
-            $serviceRequest->update(['professional_id' => $professionalId]);
-        }
-    }
-
-    /**
      * A professional carrying a live visit is 'ocupado'; otherwise back to
      * 'disponible'. Never touches someone who logged off ('desconectado').
      */
@@ -77,11 +64,20 @@ class DoctorDashboardController extends Controller
             return;
         }
 
-        $busy = ServiceRequest::where('professional_id', $professionalId)
+        // 'ocupado' significa "al tope de atenciones", no "tiene alguna".
+        //
+        // Era un `exists()`: con una sola visita abierta el profesional quedaba
+        // marcado como ocupado, y eso lo sacaba del recuento de disponibles.
+        // Mientras el tope sea 1 el comportamiento es idéntico al anterior;
+        // subiendo el parámetro, el estado sigue queriendo decir algo útil en
+        // vez de quedarse pegado en 'ocupado' desde la primera solicitud.
+        $abiertas = ServiceRequest::where('professional_id', $professionalId)
             ->whereIn('status', ['accepted', 'en_camino', 'en_atencion'])
-            ->exists();
+            ->count();
 
-        $next = $busy ? 'ocupado' : 'disponible';
+        $tope = max(1, \App\Models\Parametro::int('cola.casos_por_profesional', 1));
+
+        $next = $abiertas >= $tope ? 'ocupado' : 'disponible';
         if ($professional->duty_status !== $next) {
             $professional->update(['duty_status' => $next]);
         }
@@ -214,8 +210,17 @@ class DoctorDashboardController extends Controller
             return response()->json(['error' => 'Reserva no encontrada'], 404);
         }
 
-        // Acting on an unassigned request claims it for this professional
-        $this->claimIfUnassigned($serviceRequest);
+        // Avanzar el estado ya no toma la solicitud.
+        //
+        // Tomarla es ahora un acto explícito —QueueController::claim— y no un
+        // efecto de pulsar el botón de avanzar. Mezclar las dos decisiones en
+        // un mismo botón dejaba sin registrar el momento en que alguien se
+        // hacía cargo, y hacía imposible ofrecer la solicitud en una cola.
+        if (empty($serviceRequest->professional_id) && !$this->isAdmin()) {
+            return response()->json([
+                'error' => 'Toma la solicitud antes de avanzar su estado.',
+            ], 409);
+        }
 
         $nextStatus = $validated['status'];
         $nextStep = 0;
@@ -330,8 +335,18 @@ class DoctorDashboardController extends Controller
             return response()->json(['error' => 'Reserva no encontrada'], 404);
         }
 
-        // Broadcasting a position also claims an unassigned request
-        $this->claimIfUnassigned($serviceRequest);
+        // Transmitir la posicion ya no toma la solicitud.
+        //
+        // El portal empieza a emitir GPS en cuanto seleccionas una tarjeta
+        // (`selectBooking` llama a `startLocationBroadcast`), y este metodo
+        // llamaba a `claimIfUnassigned`. Es decir: abrir una solicitud de la
+        // cola para leerla bastaba para quedartela, sin pulsar nada. Tomarla es
+        // ahora un acto explicito — QueueController::claim.
+        if (empty($serviceRequest->professional_id)) {
+            return response()->json([
+                'error' => 'Toma la solicitud antes de transmitir tu posicion.',
+            ], 409);
+        }
 
         $serviceRequest->update([
             'professional_lat' => $validated['lat'],
@@ -372,8 +387,19 @@ class DoctorDashboardController extends Controller
             return response()->json(['error' => 'Reserva no encontrada'], 404);
         }
 
-        // Replying to an unassigned request also claims it
-        $this->claimIfUnassigned($serviceRequest);
+        // Escribirle al paciente exige haber tomado la solicitud.
+        //
+        // Antes responder una duda la asignaba en silencio. Y dejarlo abierto
+        // sin asignar tampoco sirve: el canal se llama "comunicación directa" y
+        // varios profesionales escribiéndole a la vez a alguien que aún no sabe
+        // quién lo atenderá es lo contrario de eso. Si hace falta preguntar
+        // algo antes de comprometerse, se toma y se suelta —`release` existe
+        // justamente para eso.
+        if (empty($serviceRequest->professional_id) && !$this->isAdmin()) {
+            return response()->json([
+                'error' => 'Toma la solicitud para poder escribirle al paciente.',
+            ], 409);
+        }
 
         $message = ChatMessage::create([
             'id' => ChatMessage::nextId('web_msg'),

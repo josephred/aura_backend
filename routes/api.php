@@ -9,6 +9,7 @@ use App\Http\Controllers\StaffProfileController;
 use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\DispatchController;
 use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\QueueController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\DependentController;
 use App\Http\Controllers\AddressController;
@@ -128,6 +129,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // or bearer token — is resolved by ResolvesStaffScope.
     Route::middleware('staff.api')->prefix('staff')->group(function () {
         Route::get('/bookings', [DoctorDashboardController::class, 'bookings']);
+
+        // Cola de pacientes por servicio, y toma explicita.
+        Route::get('/queue', [QueueController::class, 'index']);
+        Route::post('/bookings/{id}/claim', [QueueController::class, 'claim']);
+        Route::post('/bookings/{id}/release', [QueueController::class, 'release']);
         Route::post('/bookings/{id}/status', [DoctorDashboardController::class, 'updateStatus']);
         Route::post('/bookings/{id}/location', [DoctorDashboardController::class, 'updateLocation']);
         Route::get('/bookings/{id}/messages', [DoctorDashboardController::class, 'getMessages']);

@@ -6,6 +6,7 @@ use App\Http\Controllers\ClinicalMediaController;
 use App\Http\Controllers\DoctorAgendaController;
 use App\Http\Controllers\DoctorDashboardController;
 use App\Http\Controllers\LabPortalController;
+use App\Http\Controllers\QueueController;
 use App\Http\Controllers\StaffAuthController;
 
 Route::get('/', function () {
@@ -42,6 +43,11 @@ Route::post('/doctor/logout', [StaffAuthController::class, 'logout']);
 Route::middleware('staff.auth')->group(function () {
     Route::get('/doctor', [DoctorDashboardController::class, 'index']);
     Route::get('/doctor/api/bookings', [DoctorDashboardController::class, 'bookings']);
+
+    // Cola de pacientes por servicio, y toma explicita.
+    Route::get('/doctor/api/queue', [QueueController::class, 'index']);
+    Route::post('/doctor/api/bookings/{id}/claim', [QueueController::class, 'claim']);
+    Route::post('/doctor/api/bookings/{id}/release', [QueueController::class, 'release']);
     Route::post('/doctor/api/bookings/{id}/status', [DoctorDashboardController::class, 'updateStatus']);
     Route::post('/doctor/api/bookings/{id}/location', [DoctorDashboardController::class, 'updateLocation']);
     Route::get('/doctor/api/bookings/{id}/messages', [DoctorDashboardController::class, 'getMessages']);

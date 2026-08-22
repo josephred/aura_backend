@@ -205,23 +205,31 @@ class StaffPortalTest extends TestCase
             'id' => 'req_guardia',
             'user_id' => $user->id,
             'service_id' => 'medico',
-            'status' => 'pending_payment',
+            // Pagada: a la cola solo llegan las que ya se cobraron.
+            'status' => 'accepted',
             'patient_type' => 'self',
             'address_text' => 'Calle 1',
             'payment_method' => 'mercadopago',
             'final_price' => 25000,
             'start_time' => '10:00',
             'eta_minutes' => 30,
-            'current_step' => 0,
+            'current_step' => 1,
         ]);
+
+        // Sin la habilitacion por servicio no pueden tomarla, y eso ahora se
+        // comprueba de verdad en vez de deducirse del texto de `specialty`.
+        \App\Models\Professional::find('prof_a')->services()->sync(['medico']);
+        \App\Models\Professional::find('prof_b')->services()->sync(['medico']);
 
         // Unassigned: both professionals see it (guardia model)
         $this->post('/doctor/login', ['email' => 'a@aura.cl', 'password' => 'clave-segura-123']);
         $this->getJson('/doctor/api/bookings')->assertJsonCount(1);
 
-        // Professional A accepts -> request becomes theirs
+        // Tomarla es un acto explicito: avanzar el estado ya no la asigna.
         $this->postJson('/doctor/api/bookings/req_guardia/status', ['status' => 'accepted'])
-            ->assertStatus(200);
+            ->assertStatus(409);
+
+        $this->postJson('/doctor/api/bookings/req_guardia/claim')->assertStatus(200);
         $this->assertEquals('prof_a', \App\Models\ServiceRequest::find('req_guardia')->professional_id);
 
         // A's replies are signed with their name

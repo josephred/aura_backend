@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ChatMessage;
 use App\Models\ClinicalService;
 use App\Models\Professional;
 use App\Models\ServiceRequest;
@@ -39,11 +40,15 @@ class ChatChannelTest extends TestCase
         ]);
     }
 
+    /**
+     * Crea el profesional y lo habilita en el catalogo existente. Sin filas en
+     * `professional_service` el claim responde 403.
+     */
     private function makeProfessional(string $id = 'prof_chat'): Professional
     {
-        return Professional::forceCreate([
+        $prof = Professional::forceCreate([
             'id' => $id,
-            'name' => 'Dra. Canal',
+            'name' => $id === 'prof_chat' ? 'Dra. Canal' : 'Dr. Otro',
             'specialty' => 'Medicina General',
             'consultation_price' => 20000,
             'consultation_duration_minutes' => 30,
@@ -51,7 +56,13 @@ class ChatChannelTest extends TestCase
             'email' => "$id@aura.cl",
             'password' => Hash::make('clave-segura-123'),
             'role' => 'professional',
+            'duty_status' => 'disponible',
+            'coverage_zones' => 'Providencia',
         ]);
+
+        $prof->services()->sync(ClinicalService::pluck('id')->all());
+
+        return $prof;
     }
 
     private function makeBooking(string $id, User $patient, ?string $professionalId = null): ServiceRequest
@@ -157,6 +168,65 @@ class ChatChannelTest extends TestCase
         // El stream de seguimiento lleva el hilo completo dentro; se abría sin
         // comprobar de quién era la reserva.
         $this->withHeaders($headers)->getJson('/api/bookings/req_ajeno/sse')->assertStatus(404);
+    }
+
+    public function test_taking_an_unassigned_request_introduces_the_real_professional(): void
+    {
+        $this->makeService();
+        $this->makeProfessional();
+        $patient = $this->makePatient();
+        // Sin asignar: como queda una solicitud despues de pagarse, esperando
+        // que alguien de la guardia la tome.
+        $this->makeBooking('req_toma', $patient, null);
+
+        // El mensaje firmado como profesional que decia "me dirijo hacia tu
+        // ubicacion" antes de que nadie la tomara ya no se escribe.
+        $this->assertDatabaseCount('chat_messages', 0);
+
+        $this->post('/doctor/login', [
+            'email' => 'prof_chat@aura.cl',
+            'password' => 'clave-segura-123',
+        ])->assertRedirect('/doctor');
+
+        $this->postJson('/doctor/api/bookings/req_toma/claim')->assertStatus(200);
+        $this->post('/doctor/logout');
+
+        $this->assertSame('prof_chat', ServiceRequest::find('req_toma')->professional_id);
+
+        $introduccion = ChatMessage::where('service_request_id', 'req_toma')
+            ->where('sender', 'provider')
+            ->orderBy('created_at')
+            ->first();
+
+        $this->assertNotNull($introduccion);
+        // Firmada: es el primer mensaje que el paciente recibe de una persona
+        // real, y tiene que saber de quien.
+        $this->assertSame('Dra. Canal', $introduccion->sender_name);
+        $this->assertStringContainsString('Dra. Canal', $introduccion->text);
+    }
+
+    public function test_a_request_already_taken_cannot_be_claimed_by_someone_else(): void
+    {
+        $this->makeService();
+        $this->makeProfessional('prof_chat');
+        $this->makeProfessional('prof_otro');
+        $patient = $this->makePatient();
+        $this->makeBooking('req_disputa', $patient, null);
+
+        $this->post('/doctor/login', ['email' => 'prof_chat@aura.cl', 'password' => 'clave-segura-123']);
+        $this->postJson('/doctor/api/bookings/req_disputa/claim')->assertStatus(200);
+        $this->post('/doctor/logout');
+
+        $this->assertSame('prof_chat', ServiceRequest::find('req_disputa')->professional_id);
+
+        // El segundo ya no la ve ni puede operarla. La toma se resuelve con un
+        // UPDATE condicionado a que siga libre, no leyendo y escribiendo
+        // despues, que es lo que dejaba que el segundo pisara al primero.
+        $this->post('/doctor/login', ['email' => 'prof_otro@aura.cl', 'password' => 'clave-segura-123']);
+        $this->postJson('/doctor/api/bookings/req_disputa/claim')->assertStatus(409);
+        $this->post('/doctor/logout');
+
+        $this->assertSame('prof_chat', ServiceRequest::find('req_disputa')->professional_id);
     }
 
     public function test_patient_message_is_stored_and_gets_no_automatic_reply(): void

@@ -176,10 +176,22 @@ class AuraTest extends TestCase
             'role' => 'professional',
         ]);
 
+        // Sin la habilitacion por servicio no puede tomarla: el pivote
+        // `professional_service` reemplazo la deduccion por el texto de
+        // `specialty`, que asignaba a quien no atendia la prestacion.
+        $professional->services()->sync(['medico']);
+
         $this->post('/doctor/login', [
             'email' => 'flow@aura.cl',
             'password' => 'clave-segura-123',
         ])->assertRedirect('/doctor');
+
+        // Tomarla es un acto explicito. Avanzar el estado ya no la asigna de
+        // paso, asi que sobre una solicitud sin duenno el portal responde 409.
+        $this->postJson("/doctor/api/bookings/{$bookingId}/status", ['status' => 'en_camino'])
+             ->assertStatus(409);
+
+        $this->postJson("/doctor/api/bookings/{$bookingId}/claim")->assertStatus(200);
 
         foreach ([['en_camino', 2], ['en_atencion', 3], ['completed', 4]] as [$status, $step]) {
             $this->postJson("/doctor/api/bookings/{$bookingId}/status", ['status' => $status])
