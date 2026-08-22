@@ -19,6 +19,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Database\Eloquent\Model::preventSilentlyDiscardingAttributes(!app()->isProduction());
+
         if (str_contains(request()->header('X-Forwarded-Proto', ''), 'https') || request()->secure()) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }

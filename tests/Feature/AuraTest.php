@@ -164,7 +164,7 @@ class AuraTest extends TestCase
         // 2-4. The lifecycle is driven by the professional from the portal.
         // There is no patient-facing endpoint to advance a request: the patient
         // must not be able to mark their own care as completed.
-        $professional = \App\Models\Professional::create([
+        $professional = \App\Models\Professional::forceCreate([
             'id' => 'prof_test_flow',
             'name' => 'Dra. Prueba',
             'specialty' => 'Medicina General',

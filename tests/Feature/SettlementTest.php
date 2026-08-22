@@ -23,7 +23,7 @@ class SettlementTest extends TestCase
 
     private function makeProfessional(string $id = 'prof_pago'): Professional
     {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => 'Dra. Camila Rivera',
             'specialty' => 'Medicina Interna',

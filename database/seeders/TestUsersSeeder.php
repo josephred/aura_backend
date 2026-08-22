@@ -70,7 +70,8 @@ class TestUsersSeeder extends Seeder
 
         // Portal (web) counterparts: the professional and the operator also
         // need to be able to log into /doctor.
-        Professional::updateOrCreate(['id' => 'prof_test_profesional'], [
+        $prof1 = Professional::find('prof_test_profesional') ?? new Professional(['id' => 'prof_test_profesional']);
+        $prof1->forceFill([
             'name' => 'Dr. Profesional de Prueba',
             'specialty' => 'Medicina General',
             'bio' => 'Cuenta de prueba para el portal de profesionales.',
@@ -82,12 +83,13 @@ class TestUsersSeeder extends Seeder
             'email' => 'profesional@aura.cl',
             'password' => Hash::make(self::PASSWORD),
             'role' => 'professional',
-        ]);
+        ])->save();
 
         // Laboratorista de prueba (Módulo E). Es una cuenta aparte porque la
         // toma de muestras se agenda contra bloques publicados por alguien
         // habilitado con `provides_lab`, no contra la guardia médica.
-        Professional::updateOrCreate(['id' => 'prof_test_laboratorio'], [
+        $prof2 = Professional::find('prof_test_laboratorio') ?? new Professional(['id' => 'prof_test_laboratorio']);
+        $prof2->forceFill([
             'name' => 'TM. Laboratorio de Prueba',
             'specialty' => 'Tecnología Médica',
             'bio' => 'Cuenta de prueba para el área de laboratorio del portal.',
@@ -100,7 +102,7 @@ class TestUsersSeeder extends Seeder
             'email' => 'laboratorio@aura.cl',
             'password' => Hash::make(self::PASSWORD),
             'role' => 'professional',
-        ]);
+        ])->save();
 
         // Su contraparte en la app, para que pueda trabajar desde el teléfono.
         $labUser = User::updateOrCreate(['id' => 15], [
@@ -114,7 +116,8 @@ class TestUsersSeeder extends Seeder
             'professional_id' => 'prof_test_laboratorio',
         ])->save();
 
-        Professional::updateOrCreate(['id' => 'staff_test_operador'], [
+        $prof3 = Professional::find('staff_test_operador') ?? new Professional(['id' => 'staff_test_operador']);
+        $prof3->forceFill([
             'name' => 'Operador de Prueba',
             'specialty' => 'Administración',
             'consultation_price' => 0,
@@ -124,7 +127,7 @@ class TestUsersSeeder extends Seeder
             'email' => 'operador@aura.cl',
             'password' => Hash::make(self::PASSWORD),
             'role' => 'admin',
-        ]);
+        ])->save();
 
         $this->command?->info('Cuentas de prueba creadas (contraseña: ' . self::PASSWORD . ')');
         foreach (self::ACCOUNTS as $email => [, , $role]) {

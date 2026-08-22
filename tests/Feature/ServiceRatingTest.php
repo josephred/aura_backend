@@ -36,7 +36,7 @@ class ServiceRatingTest extends TestCase
 
     private function makeProfessional(string $id = 'prof_rating'): Professional
     {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => 'Dra. Andrea Morales',
             'specialty' => 'Medicina General',

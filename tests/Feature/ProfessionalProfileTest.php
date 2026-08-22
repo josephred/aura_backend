@@ -22,7 +22,7 @@ class ProfessionalProfileTest extends TestCase
 
     private function makeProfessional(array $overrides = []): Professional
     {
-        return Professional::create(array_merge([
+        return Professional::forceCreate(array_merge([
             'id' => 'prof_ficha',
             'name' => 'Dra. Camila Rivera',
             'specialty' => 'Medicina Interna',
@@ -117,7 +117,7 @@ class ProfessionalProfileTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('0.rating_avg', null);
 
-        $professional->update(['rating_avg' => 4.7, 'rating_count' => 12]);
+        $professional->forceFill(['rating_avg' => 4.7, 'rating_count' => 12])->save();
 
         $this->getJson('/api/professionals')
             ->assertStatus(200)

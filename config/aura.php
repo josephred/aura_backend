@@ -106,4 +106,17 @@ return [
         'max_seconds' => (int) env('AURA_SSE_MAX_SECONDS', 50),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Almacenamiento público / Medios persistentes (P1.2)
+    |--------------------------------------------------------------------------
+    |
+    | 'public' para disco local o 's3' para Cloudflare R2 / AWS S3 / Backblaze B2.
+    |
+    */
+
+    'media' => [
+        'public_disk' => env('AURA_PUBLIC_DISK', 'public'),
+    ],
+
 ];

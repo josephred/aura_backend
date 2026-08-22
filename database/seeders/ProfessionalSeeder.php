@@ -95,7 +95,8 @@ class ProfessionalSeeder extends Seeder
             $schedule = $data['schedule'];
             unset($data['schedule']);
 
-            Professional::updateOrCreate(['id' => $data['id']], $data + ['active' => true]);
+            $prof = Professional::find($data['id']) ?? new Professional(['id' => $data['id']]);
+            $prof->forceFill($data + ['active' => true])->save();
 
             ProfessionalSchedule::where('professional_id', $data['id'])->delete();
             foreach ($schedule as [$day, $start, $end]) {

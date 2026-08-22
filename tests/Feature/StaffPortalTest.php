@@ -19,7 +19,7 @@ class StaffPortalTest extends TestCase
         string $role = 'professional',
         bool $active = true,
     ): Professional {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => "Prof $id",
             'specialty' => 'Medicina General',

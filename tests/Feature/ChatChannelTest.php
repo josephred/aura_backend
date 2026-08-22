@@ -41,7 +41,7 @@ class ChatChannelTest extends TestCase
 
     private function makeProfessional(string $id = 'prof_chat'): Professional
     {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => 'Dra. Canal',
             'specialty' => 'Medicina General',

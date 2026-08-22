@@ -235,6 +235,14 @@ class LabPortalController extends Controller
             return response()->json(['error' => 'Toma de muestras no encontrada'], 404);
         }
 
+        $existing = LabResult::where('service_request_id', $serviceRequest->id)->first();
+        if ($existing !== null) {
+            return response()->json([
+                'error' => 'Esta toma ya tiene un informe cargado.',
+                'result' => $existing,
+            ], 409);
+        }
+
         if ($serviceRequest->status === 'cancelled') {
             return response()->json(['error' => 'La solicitud de toma de muestras se encuentra cancelada'], 422);
         }

@@ -12,14 +12,13 @@ class Professional extends Model
 
     /**
      * Campos asignables masivamente.
+     * `password`, `role` y `commission_bps` se asignan exclusivamente con forceFill/forceCreate.
      */
     protected $fillable = [
         'id',
         'user_id',
         'name',
         'email',
-        'password',
-        'role',
         'phone',
         'specialty',
         'bio',
@@ -34,7 +33,6 @@ class Professional extends Model
         'active',
         'rating_avg',
         'rating_count',
-        'commission_bps',
         'last_login_at',
         'rut',
         'bank_name',

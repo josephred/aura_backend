@@ -1,0 +1,52 @@
+name: tests
+on: [push, pull_request]
+
+jobs:
+  tests:
+    name: Test Suite (Postgres & SQLite)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aura
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: aura_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pdo_sqlite, zip, bcmath, mbstring
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Run SQLite Tests (Fast Baseline)
+        run: ./vendor/bin/phpunit --colors=always
+
+      - name: Run PostgreSQL Tests (Production Engine Parity)
+        run: ./vendor/bin/phpunit -c phpunit.pgsql.xml --colors=always
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: aura_test
+          DB_USERNAME: aura
+          DB_PASSWORD: secret

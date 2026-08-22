@@ -66,10 +66,10 @@ class RatingController extends Controller
                     $avg = ServiceRating::where('professional_id', $professional->id)->avg('rating');
                     $count = ServiceRating::where('professional_id', $professional->id)->count();
 
-                    $professional->update([
+                    $professional->forceFill([
                         'rating_avg' => $avg !== null ? round((float) $avg, 2) : null,
                         'rating_count' => (int) $count,
-                    ]);
+                    ])->save();
                 }
             }
 

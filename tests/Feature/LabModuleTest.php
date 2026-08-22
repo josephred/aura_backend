@@ -51,7 +51,7 @@ class LabModuleTest extends TestCase
 
     private function makeLabProfessional(string $id = 'prof_lab'): Professional
     {
-        return Professional::create([
+        return Professional::forceCreate([
             'id' => $id,
             'name' => 'TM. Laboratorio',
             'specialty' => 'Tecnología Médica',
@@ -427,7 +427,7 @@ class LabModuleTest extends TestCase
     public function test_professional_specific_commission_overrides_the_platform_rate(): void
     {
         $professional = $this->makeLabProfessional();
-        $professional->update(['commission_bps' => 500]);
+        $professional->forceFill(['commission_bps' => 500])->save();
 
         $settlement = app(SettlementService::class);
         $this->assertSame(500, $settlement->commissionBpsFor($professional->fresh()));
@@ -563,10 +563,47 @@ class LabModuleTest extends TestCase
             ->get("/media/lab-results/{$result->id}")->assertStatus(403);
 
         // La administración coordina y sí puede.
-        $other->update(['role' => 'admin']);
+        $other->forceFill(['role' => 'admin'])->save();
         $this->flushSession();
         $this->withSession($this->staffSession($other->fresh()))
             ->get("/media/lab-results/{$result->id}")->assertStatus(200);
+    }
+
+    public function test_upload_result_is_idempotent_and_rejects_duplicate_reports(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+
+        $prof = $this->makeLabProfessional('prof_lab_idem');
+        $block = $this->makeBlock($prof->id);
+        [, $token] = $this->makeUser('paciente_idem@aura.cl');
+
+        $created = $this->withToken($token)->postJson('/api/lab/requests', [
+            'schedule_id' => $block->id,
+            'starts_at' => now()->addDays(3)->setTime(8, 0)->format('Y-m-d H:i:s'),
+            'patient_type' => 'self',
+            'address_text' => 'Av. Providencia 1234',
+            'exam_required' => 'Perfil Lipídico',
+        ])->json();
+
+        // 1. Primera carga exitosa -> 201
+        $this->withSession($this->staffSession($prof))
+            ->post("/doctor/api/lab/collections/{$created['id']}/results", [
+                'title' => 'Perfil Lipídico',
+                'file' => UploadedFile::fake()->create('informe1.pdf', 120, 'application/pdf'),
+            ])->assertStatus(201);
+
+        $this->assertSame(1, LabResult::where('service_request_id', $created['id'])->count());
+
+        // 2. Reenvío accidental del formulario -> 409 Conflict sin duplicar registros ni correos
+        $this->withSession($this->staffSession($prof))
+            ->post("/doctor/api/lab/collections/{$created['id']}/results", [
+                'title' => 'Perfil Lipídico Reintento',
+                'file' => UploadedFile::fake()->create('informe2.pdf', 120, 'application/pdf'),
+            ])->assertStatus(409)
+            ->assertJsonPath('error', 'Esta toma ya tiene un informe cargado.');
+
+        $this->assertSame(1, LabResult::where('service_request_id', $created['id'])->count());
     }
 
     // ------------------------------------------------------- Portal / agenda

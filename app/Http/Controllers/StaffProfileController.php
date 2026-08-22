@@ -107,8 +107,11 @@ class StaffProfileController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $path = $request->file('photo')->store('professionals/photos', 'public');
-            $attributes['photo_url'] = '/storage/' . $path;
+            $disk = config('aura.media.public_disk', 'public');
+            $path = $request->file('photo')->store('professionals/photos', $disk);
+            $attributes['photo_url'] = $disk === 'public'
+                ? '/storage/' . $path
+                : \Illuminate\Support\Facades\Storage::disk($disk)->url($path);
         } elseif (array_key_exists('photo_url', $validated)) {
             $attributes['photo_url'] = $validated['photo_url'];
         }
