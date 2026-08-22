@@ -28,6 +28,9 @@ class QueueController extends Controller
     /** Estados en los que una atención sigue ocupando al profesional. */
     private const ABIERTAS = ['accepted', 'en_camino', 'en_atencion'];
 
+    /** @var array<string, bool> Cobertura por servicio|zona, dentro de una petición. */
+    private array $coberturaPorZona = [];
+
     /**
      * La cola que este profesional puede tomar, agrupada por servicio.
      *
@@ -80,17 +83,27 @@ class QueueController extends Controller
             $fueraDeZona = [];
 
             foreach ($delServicio as $solicitud) {
-                $fila = $this->fila($solicitud);
-
                 // Sin ficha de profesional (un admin mirando) todo cuenta como
                 // propio: no tiene zona con la que comparar.
                 $propia = $profesional === null || $zones->covers($profesional, $solicitud->zone);
 
                 if ($propia) {
-                    $enMiZona[] = $fila;
-                } else {
-                    $fueraDeZona[] = $fila;
+                    $enMiZona[] = $this->fila($solicitud);
+                    continue;
                 }
+
+                // Una solicitud de otro sector solo se ofrece cuando ya escaló,
+                // o cuando esa zona no la cubre nadie. Sin esta condición "que
+                // mande la zona" no significaba nada: todas las solicitudes de
+                // la ciudad le aparecían a todo el mundo desde el minuto cero,
+                // y quien refrescara primero se las llevaba, que es justo lo
+                // contrario de repartir por sector.
+                if ((int) $solicitud->escalada_nivel < 1
+                    && $this->alguienCubre($solicitud, $zones)) {
+                    continue;
+                }
+
+                $fueraDeZona[] = $this->fila($solicitud);
             }
 
             if ($enMiZona === [] && $fueraDeZona === []) {
@@ -277,8 +290,34 @@ class QueueController extends Controller
             'esperando_minutos' => $solicitud->created_at
                 ? (int) $solicitud->created_at->diffInMinutes(now())
                 : 0,
-            'escalada' => !empty($solicitud->escalada_at),
+            'escalada' => (int) $solicitud->escalada_nivel > 0,
+            // 1 = ofrecida fuera de su sector. 2 = operaciones ya la tiene
+            // marcada. La interfaz distingue: no es lo mismo "nadie del sector
+            // respondió" que "esto lleva media hora sin que vaya nadie".
+            'escalada_nivel' => (int) $solicitud->escalada_nivel,
         ];
+    }
+
+    /**
+     * ¿Hay algún profesional en turno que cubra la zona de esta solicitud?
+     *
+     * Se memoiza por servicio y zona: la bandeja se refresca cada pocos
+     * segundos y sin esto sería una consulta por cada tarjeta en pantalla.
+     *
+     * @param array<string, bool> $memo
+     */
+    private function alguienCubre(ServiceRequest $solicitud, DispatchZoneService $zones): bool
+    {
+        $zona = $solicitud->zone ?: 'General';
+        $clave = $solicitud->service_id . '|' . $zona;
+
+        if (!array_key_exists($clave, $this->coberturaPorZona)) {
+            $this->coberturaPorZona[$clave] = $zones
+                ->professionalsForZone($solicitud->service_id, $zona)
+                ->isNotEmpty();
+        }
+
+        return $this->coberturaPorZona[$clave];
     }
 
     private function profesionalActual(): ?Professional

@@ -73,6 +73,35 @@ class ClinicalChannel
         $this->notify($serviceRequest, 'Tu solicitud volvió a la cola', $texto);
     }
 
+    /**
+     * Nadie ha tomado la solicitud y ya pasó demasiado rato.
+     *
+     * Solo se escribe en el segundo nivel de escalado, no en el primero. A los
+     * quince minutos no ha cambiado nada para el paciente y decirle "todavía
+     * nadie te ha tomado" es alarma sin nada que hacer con ella. En el segundo
+     * nivel sí cambió algo: hay una persona de operaciones mirando su caso, y
+     * el paciente merece saber que puede cancelar en vez de seguir esperando
+     * a ciegas. El silencio ahí no es prudencia, es dejarlo sin opciones.
+     */
+    public function announceStillSearching(ServiceRequest $serviceRequest): void
+    {
+        $servicio = $this->serviceTitle($serviceRequest);
+
+        $texto = "Seguimos buscando un profesional disponible para tu solicitud de $servicio. "
+            . 'La ampliamos a los sectores vecinos y nuestro equipo está al tanto. '
+            . 'Si prefieres no seguir esperando, puedes cancelarla desde la aplicación.';
+
+        ChatMessage::create([
+            'id' => ChatMessage::nextId('msg_escala'),
+            'service_request_id' => $serviceRequest->id,
+            'sender' => 'system',
+            'text' => $texto,
+            'timestamp' => date('H:i'),
+        ]);
+
+        $this->notify($serviceRequest, 'Seguimos buscando profesional', $texto);
+    }
+
     private function serviceTitle(ServiceRequest $serviceRequest): string
     {
         return ClinicalService::find($serviceRequest->service_id)?->short_title ?? 'tu atención';

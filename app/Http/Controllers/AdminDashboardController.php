@@ -45,6 +45,18 @@ class AdminDashboardController extends Controller
 
         $avgEta = (int) round((float) ($open->avg('eta_minutes') ?? 0));
 
+        // Lo que nadie ha tomado. Es distinto de `open_requests`: una atención
+        // en curso está abierta pero tiene profesional yendo. Estas no.
+        $enCola = ServiceRequest::query()
+            ->where(fn ($q) => $q->whereNull('professional_id')->orWhere('professional_id', ''))
+            ->where('status', 'accepted')
+            ->where('is_scheduled', false)
+            ->get(['id', 'created_at', 'escalada_nivel']);
+
+        $esperaMayor = (int) ($enCola
+            ->map(fn ($req) => $req->created_at ? (int) $req->created_at->diffInMinutes(now()) : 0)
+            ->max() ?? 0);
+
         return response()->json([
             'professionals_on_duty' => $onDuty,
             'professionals_total' => $totalProfessionals,
@@ -55,6 +67,13 @@ class AdminDashboardController extends Controller
                 ->whereNotNull('prescription_file')
                 ->where('status', 'pending_payment')
                 ->count(),
+            // Cola sin dueño: el número que dice si el despacho voluntario
+            // está funcionando. `needs_operations` son las que ya pasaron el
+            // segundo corte y esperan que una persona intervenga.
+            'queued_requests' => $enCola->count(),
+            'escalated_requests' => $enCola->where('escalada_nivel', '>=', 1)->count(),
+            'needs_operations' => $enCola->where('escalada_nivel', '>=', 2)->count(),
+            'longest_wait_minutes' => $esperaMayor,
         ]);
     }
 

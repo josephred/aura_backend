@@ -32,6 +32,13 @@ Schedule::command('appointments:send-reminders')->everyFiveMinutes();
 // slot and distort the zone wait estimates.
 Schedule::command('bookings:expire-unpaid')->everyFiveMinutes();
 
+// Escalado de la cola: una solicitud que nadie toma deja de ser exclusiva de
+// su sector y, si sigue sin dueno, se marca para operaciones. Cada minuto
+// porque el corte lo fija operaciones en la tabla de parametros y puede ser
+// tan corto como un minuto; el comando es idempotente —`escalada_nivel` solo
+// sube— asi que correrlo de mas no avisa de mas.
+Schedule::command('cola:escalar')->everyMinute()->withoutOverlapping();
+
 // Prune expired symptom voice notes from disk retention.
 Schedule::command('aura:prune-symptom-audio')->daily();
 

@@ -250,6 +250,20 @@
 
         async function loadMetrics() {
             const m = await api('/admin/api/metrics');
+
+            // El despacho es voluntario: si nadie toma, no falla nada visible.
+            // Este es el único sitio donde eso se nota antes de que llame el
+            // paciente, asi que el numero cambia de color en vez de quedarse
+            // igual que los demas.
+            const urgentes = m.needs_operations ?? 0;
+            const escaladas = m.escalated_requests ?? 0;
+            const colaColor = urgentes ? 'var(--danger)' : escaladas ? 'var(--warn)' : 'var(--text)';
+            const colaPie = urgentes
+                ? `${urgentes} lleva${urgentes === 1 ? '' : 'n'} demasiado: revisar`
+                : escaladas
+                    ? `${escaladas} escalada${escaladas === 1 ? '' : 's'} fuera de su zona`
+                    : `Espera mayor: ${m.longest_wait_minutes ?? 0} min`;
+
             document.getElementById('metrics').innerHTML = `
                 <div class="card">
                     <div class="metric-label">Prestadores en turno</div>
@@ -270,6 +284,11 @@
                     <div class="metric-label">Completadas hoy</div>
                     <div class="metric-value">${m.completed_today}</div>
                     <div class="metric-hint">Atenciones cerradas</div>
+                </div>
+                <div class="card">
+                    <div class="metric-label">Sin tomar</div>
+                    <div class="metric-value" style="color:${colaColor}">${m.queued_requests ?? 0}</div>
+                    <div class="metric-hint">${colaPie}</div>
                 </div>`;
         }
 

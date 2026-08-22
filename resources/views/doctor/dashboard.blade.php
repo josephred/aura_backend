@@ -485,6 +485,17 @@
             color: var(--status-cancelled);
         }
 
+        .escala-nota {
+            margin-top: 8px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.35;
+            background: rgba(239, 68, 68, 0.10);
+            color: var(--status-cancelled);
+        }
+
         .btn-take {
             width: 100%;
             margin-top: 10px;
@@ -1352,6 +1363,12 @@
                         servicios: data.servicios || [],
                         aviso: data.aviso || null
                     };
+                    // Tambien las estadisticas: el contador de pendientes sale
+                    // de la cola, y las dos peticiones corren en paralelo. Si
+                    // solo se recalculaba al volver /bookings, quien ganara la
+                    // carrera dejaba el numero en cero hasta el refresco
+                    // siguiente.
+                    renderStats();
                     renderBookingList();
                 })
                 .catch(err => console.error('Error cargando la cola:', err));
@@ -1381,15 +1398,17 @@
             let completed = 0;
 
             bookings.forEach(b => {
-                // "Pendiente" es ahora lo que sigue en la cola sin dueno. Una
-                // solicitud ya tomada no esta esperando a nadie, y contarla
-                // aqui inflaba el numero que mira el coordinador.
                 if (b.status === 'pending') pending++;
-                else if (b.status === 'accepted' && !b.professional_id) pending++;
                 else if (b.status === 'en_camino') traveling++;
                 else if (b.status === 'en_atencion') active++;
                 else if (b.status === 'completed') completed++;
             });
+
+            // Las que siguen sin duenno se cuentan desde la cola y no desde
+            // /bookings: /bookings devuelve las de toda la ciudad, y la cola
+            // solo ofrece las de tu sector mas las escaladas. Contarlas por
+            // separado dejaba un numero que no cuadraba con la lista de abajo.
+            pending += (queue.servicios || []).reduce((n, s) => n + (s.esperando || 0), 0);
 
             document.getElementById('stats-pending').textContent = pending;
             document.getElementById('stats-traveling').textContent = traveling;
@@ -1461,18 +1480,30 @@
             // esperando, asi que va delante y no escondido en el detalle.
             const queueCard = (f) => {
                 const isActive = f.id === selectedBookingId ? 'active' : '';
-                const urgente = f.escalada || f.esperando_minutos >= 15;
                 const puede = !alTope;
+
+                // El nivel de escalado lo fija el servidor con los cortes de la
+                // tabla de parámetros. La tarjeta no vuelve a decidirlo con un
+                // umbral propio: si operaciones mueve el corte a 5 minutos, lo
+                // que se ve aquí tiene que moverse con él.
+                const nivel = f.escalada_nivel || 0;
+                const badge = nivel >= 2 ? 'Sin tomar' : nivel === 1 ? 'Escalada' : 'En cola';
+                const badgeClase = nivel >= 2 ? 'cancelled' : nivel === 1 ? 'pending' : 'accepted';
+
+                const aviso = nivel >= 2
+                    ? `<div class="escala-nota">Lleva demasiado sin que nadie vaya. Operaciones ya está avisada.</div>`
+                    : '';
 
                 return `
                     <div class="booking-card accepted ${isActive}" onclick="selectBooking('${esc(f.id)}')">
                         <div class="card-top">
                             <span class="service-badge">🗺️ ${esc(f.zona)}</span>
-                            <span class="status-badge pending">En cola</span>
+                            <span class="status-badge ${badgeClase}">${badge}</span>
                         </div>
                         <div class="card-patient">${esc(f.paciente)}</div>
                         <div class="card-address">📍 ${esc(f.direccion || 'Dirección no especificada')}</div>
-                        <div class="wait-chip ${urgente ? 'urgente' : ''}">⏳ Esperando ${esc(f.esperando_minutos)} min</div>
+                        <div class="wait-chip ${nivel > 0 ? 'urgente' : ''}">⏳ Esperando ${esc(f.esperando_minutos)} min</div>
+                        ${aviso}
                         <button class="btn-take" ${puede ? '' : 'disabled'}
                                 onclick="event.stopPropagation(); claimBooking('${esc(f.id)}')">
                             ${puede ? '🙋 Tomar paciente' : 'Al tope de atenciones'}
@@ -1512,7 +1543,7 @@
                         html += s.en_mi_zona.map(queueCard).join('');
                     }
                     if (s.fuera_de_zona.length) {
-                        html += subheading('Fuera de tu zona (' + s.fuera_de_zona.length + ') — puedes tomarlas si nadie del sector responde');
+                        html += subheading('Fuera de tu zona (' + s.fuera_de_zona.length + ') — nadie de su sector las está tomando');
                         html += s.fuera_de_zona.map(queueCard).join('');
                     }
                 });

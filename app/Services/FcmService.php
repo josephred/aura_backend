@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DeviceToken;
+use App\Models\User;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -68,6 +69,32 @@ class FcmService
                 Log::warning('FCM unreachable', ['error' => $e->getMessage()]);
             }
         }
+    }
+
+    /**
+     * Avisar a un profesional en su telefono.
+     *
+     * Los tokens de dispositivo cuelgan de `users`, no de `professionals`: la
+     * ficha clinica no es una cuenta. El puente es `users.professional_id`, que
+     * es como la app entra al area de staff.
+     *
+     * Ojo con lo que esto NO alcanza: un profesional que solo usa el portal web
+     * no tiene fila en `users` ni token, y aqui no recibe nada. Para el, el
+     * aviso es que la solicitud le aparezca marcada en la cola, que se refresca
+     * sola cada pocos segundos. Mientras no haya notificaciones web, esa es la
+     * unica via, y conviene no confundirla con un push que no existe.
+     *
+     * @return int Cuantos usuarios recibieron el aviso.
+     */
+    public function notifyProfessional(string $professionalId, string $title, string $body, array $data = []): int
+    {
+        $userIds = User::where('professional_id', $professionalId)->pluck('id');
+
+        foreach ($userIds as $userId) {
+            $this->notifyUser((int) $userId, $title, $body, $data);
+        }
+
+        return $userIds->count();
     }
 
     private function accessToken(): string

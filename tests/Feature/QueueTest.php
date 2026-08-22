@@ -147,6 +147,9 @@ class QueueTest extends TestCase
         $this->makeProfessional('prof_prov', ['medico'], 'Providencia');
 
         // Fuera de zona y muy antigua: no debe adelantar a las de la zona.
+        // Aparece porque a Rancagua no la cubre nadie —una comuna sin cobertura
+        // no se deja huerfana esperando a que escale—, no porque las de otra
+        // zona se ofrezcan siempre. Ver QueueEscalationTest.
         $this->encolar('req_lejos', 'medico', 'Rancagua', haceMinutos: 90);
         $this->encolar('req_nueva', 'medico', 'Providencia', haceMinutos: 5);
         $this->encolar('req_vieja', 'medico', 'Providencia', haceMinutos: 40);

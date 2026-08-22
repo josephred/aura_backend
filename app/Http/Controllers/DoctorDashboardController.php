@@ -184,6 +184,11 @@ class DoctorDashboardController extends Controller
                 'eta_minutes' => $req->eta_minutes,
                 'current_step' => $req->current_step,
                 'created_at' => $req->created_at ? $req->created_at->toIso8601String() : null,
+                // Nivel de escalado: la app pinta distinto una solicitud que
+                // nadie del sector tomó, y sin esto tendría que deducirlo del
+                // reloj, con un umbral propio que se desincroniza del que
+                // operaciones fija en la tabla de parámetros.
+                'escalada_nivel' => (int) $req->escalada_nivel,
                 'service' => $service,
                 'user' => $user,
                 'dependent' => $dependent,
