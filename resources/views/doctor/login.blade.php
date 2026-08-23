@@ -176,16 +176,16 @@
                 <span style="font-size: 11px; color: var(--text-muted);">Clave: <code>aura1234</code></span>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="testAccountsList">
-                <button type="button" onclick="fillAndSubmit('camilarivera@aura.cl')" class="demo-chip">
+                <button type="button" onclick="fillAndSubmit('camila.rivera@aura.cl')" class="demo-chip">
                     🩺 Dra. Camila (Médico)
                 </button>
-                <button type="button" onclick="fillAndSubmit('sebastianleyton@aura.cl')" class="demo-chip">
+                <button type="button" onclick="fillAndSubmit('sebastian.leyton@aura.cl')" class="demo-chip">
                     🩺 Dr. Sebastián (Médico)
                 </button>
-                <button type="button" onclick="fillAndSubmit('mariajosediaz@aura.cl')" class="demo-chip">
+                <button type="button" onclick="fillAndSubmit('maria.jose.diaz@aura.cl')" class="demo-chip">
                     🏃 Klga. María José (Kine)
                 </button>
-                <button type="button" onclick="fillAndSubmit('patriciajara@aura.cl')" class="demo-chip">
+                <button type="button" onclick="fillAndSubmit('patricia.jara@aura.cl')" class="demo-chip">
                     💉 Enf. Patricia (Enfermera)
                 </button>
                 <button type="button" onclick="fillAndSubmit('laboratorio@aura.cl')" class="demo-chip">

