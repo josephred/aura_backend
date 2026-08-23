@@ -47,6 +47,10 @@ class SocialTokenVerifier
             ]);
 
             if (!$response->successful()) {
+                Log::warning('Google tokeninfo endpoint failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
                 return null;
             }
 
@@ -54,18 +58,24 @@ class SocialTokenVerifier
 
             $allowedAudiences = array_filter([
                 config('services.google.client_id'),
+                env('GOOGLE_CLIENT_ID'),
                 '932839695266-7ocgk36gsgifbl7etokb67v2mc90ub5v.apps.googleusercontent.com',
                 '932839695266-msq5o5psrfjfh72blnppfqerh66jpclb.apps.googleusercontent.com',
             ]);
 
-            $audienceOk = in_array($data['aud'] ?? '', $allowedAudiences, true)
-                || (isset($data['azp']) && in_array($data['azp'], $allowedAudiences, true));
+            $aud = $data['aud'] ?? '';
+            $azp = $data['azp'] ?? '';
+            $audienceOk = in_array($aud, $allowedAudiences, true)
+                || in_array($azp, $allowedAudiences, true)
+                || str_starts_with($aud, '932839695266')
+                || str_starts_with($azp, '932839695266');
+
             $emailVerified = filter_var($data['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
             if (!$audienceOk || !$emailVerified || empty($data['sub']) || empty($data['email'])) {
                 Log::warning('Google token rejected', [
-                    'aud' => $data['aud'] ?? null,
-                    'azp' => $data['azp'] ?? null,
+                    'aud' => $aud,
+                    'azp' => $azp,
                     'aud_ok' => $audienceOk,
                     'email_verified' => $emailVerified,
                 ]);
