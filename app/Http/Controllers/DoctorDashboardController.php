@@ -249,62 +249,32 @@ class DoctorDashboardController extends Controller
         // reflects actual capacity, not a flag someone forgot to flip.
         $this->syncDutyStatus($serviceRequest->professional_id);
 
-        $timeStr = date('H:i');
-
-        // Aviso de cada paso en el canal clínico.
-        //
-        // Iban sin `sender_name`, así que en el teléfono aparecían como un
-        // «alguien» sin firma justo donde el resto de los mensajes del
-        // profesional sí llevan nombre. Y no salía ninguna notificación: el
-        // paciente solo se enteraba de que el profesional venía en camino si
-        // tenía la app abierta en ese preciso momento.
-        $staffName = $this->staffDisplayName();
-
-        $stepMessages = [
+        $statusNotifications = [
             'accepted' => [
-                'prefix' => 'web_msg_step1',
-                'sender' => 'provider',
                 'title' => 'Tu atención fue tomada',
-                'text' => 'Hola, soy tu especialista clínico asignado. Ya estoy preparando el equipamiento para salir hacia tu dirección.',
+                'body' => 'Un profesional clínico ha tomado tu solicitud y se encuentra coordinando la atención.',
             ],
             'en_camino' => [
-                'prefix' => 'web_msg_step2',
-                'sender' => 'provider',
                 'title' => 'El profesional va en camino',
-                'text' => 'He iniciado el trayecto hacia tu ubicación. Voy en camino directo.',
+                'body' => 'El profesional clínico ha iniciado el trayecto directo hacia tu ubicación.',
             ],
             'en_atencion' => [
-                'prefix' => 'web_msg_step3',
-                'sender' => 'provider',
                 'title' => 'El profesional llegó',
-                'text' => 'He llegado al domicilio. Estoy tocando el timbre para ingresar.',
+                'body' => 'El profesional clínico ha llegado a tu domicilio.',
             ],
             'completed' => [
-                'prefix' => 'web_msg_step4',
-                'sender' => 'system',
                 'title' => 'Atención completada',
-                'text' => 'Atención completada con éxito. Resumen médico disponible en el historial.',
+                'body' => 'Tu atención ha finalizado con éxito. El resumen médico está disponible en tu historial.',
             ],
         ];
 
-        if (isset($stepMessages[$nextStatus])) {
-            $step = $stepMessages[$nextStatus];
-
-            ChatMessage::create([
-                'id' => ChatMessage::nextId($step['prefix']),
-                'service_request_id' => $id,
-                'sender' => $step['sender'],
-                // Los del sistema no se firman: no los escribió nadie.
-                'sender_name' => $step['sender'] === 'provider' ? $staffName : null,
-                'text' => $step['text'],
-                'timestamp' => $timeStr,
-            ]);
-
+        if (isset($statusNotifications[$nextStatus])) {
+            $notif = $statusNotifications[$nextStatus];
             app(\App\Services\FcmService::class)->notifyUser(
                 $serviceRequest->user_id,
-                $step['title'],
-                $step['text'],
-                ['booking_id' => $serviceRequest->id, 'type' => 'chat'],
+                $notif['title'],
+                $notif['body'],
+                ['booking_id' => $serviceRequest->id, 'type' => 'status', 'status' => $nextStatus],
             );
         }
 

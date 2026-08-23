@@ -127,7 +127,7 @@ class ChatChannelTest extends TestCase
             ->assertJsonPath('0.text', '¿Sigue con fiebre?');
     }
 
-    public function test_status_updates_are_signed_and_land_in_the_thread(): void
+    public function test_status_updates_do_not_inject_automatic_chat_messages(): void
     {
         $this->makeService();
         $this->makeProfessional();
@@ -143,14 +143,11 @@ class ChatChannelTest extends TestCase
             ->assertStatus(200);
         $this->post('/doctor/logout');
 
+        // Los cambios de estado no inventan mensajes de chat fingidos: solo el profesional escribe
         $this->withHeaders($this->asPatient($patient))
             ->getJson('/api/bookings/req_pasos/chat')
             ->assertStatus(200)
-            ->assertJsonCount(1)
-            // Iba sin firma: el paciente veía un aviso de que "alguien" venía
-            // en camino sin saber quién.
-            ->assertJsonPath('0.sender_name', 'Dra. Canal')
-            ->assertJsonPath('0.sender', 'provider');
+            ->assertJsonCount(0);
     }
 
     public function test_the_thread_is_not_readable_by_another_patient(): void
@@ -170,7 +167,7 @@ class ChatChannelTest extends TestCase
         $this->withHeaders($headers)->getJson('/api/bookings/req_ajeno/sse')->assertStatus(404);
     }
 
-    public function test_taking_an_unassigned_request_introduces_the_real_professional(): void
+    public function test_taking_an_unassigned_request_assigns_the_real_professional(): void
     {
         $this->makeService();
         $this->makeProfessional();
@@ -179,8 +176,7 @@ class ChatChannelTest extends TestCase
         // que alguien de la guardia la tome.
         $this->makeBooking('req_toma', $patient, null);
 
-        // El mensaje firmado como profesional que decia "me dirijo hacia tu
-        // ubicacion" antes de que nadie la tomara ya no se escribe.
+        // Sin mensajes previos
         $this->assertDatabaseCount('chat_messages', 0);
 
         $this->post('/doctor/login', [
@@ -193,16 +189,8 @@ class ChatChannelTest extends TestCase
 
         $this->assertSame('prof_chat', ServiceRequest::find('req_toma')->professional_id);
 
-        $introduccion = ChatMessage::where('service_request_id', 'req_toma')
-            ->where('sender', 'provider')
-            ->orderBy('created_at')
-            ->first();
-
-        $this->assertNotNull($introduccion);
-        // Firmada: es el primer mensaje que el paciente recibe de una persona
-        // real, y tiene que saber de quien.
-        $this->assertSame('Dra. Canal', $introduccion->sender_name);
-        $this->assertStringContainsString('Dra. Canal', $introduccion->text);
+        // No se crean mensajes de chat autogenerados en la toma
+        $this->assertDatabaseCount('chat_messages', 0);
     }
 
     public function test_a_request_already_taken_cannot_be_claimed_by_someone_else(): void

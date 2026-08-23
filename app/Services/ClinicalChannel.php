@@ -31,21 +31,10 @@ class ClinicalChannel
         $servicio = $this->serviceTitle($serviceRequest);
 
         $texto = $staffName
-            ? "Hola, soy $staffName y voy a atender tu solicitud de $servicio. "
-                . 'Si hay algo que deba saber antes de llegar, escríbemelo por aquí.'
-            : "Un profesional tomó tu solicitud de $servicio. "
-                . 'Si hay algo que deba saber antes de llegar, escríbelo por aquí.';
+            ? "El profesional $staffName ha tomado tu atención de $servicio y se encuentra coordinando los insumos necesarios."
+            : "Un profesional clínico ha tomado tu solicitud de $servicio.";
 
-        ChatMessage::create([
-            'id' => ChatMessage::nextId('msg_claim'),
-            'service_request_id' => $serviceRequest->id,
-            'sender' => 'provider',
-            'sender_name' => $staffName,
-            'text' => $texto,
-            'timestamp' => date('H:i'),
-        ]);
-
-        $this->notify($serviceRequest, 'Un profesional tomó tu atención', $texto);
+        $this->notify($serviceRequest, 'Profesional Asignado', $texto);
     }
 
     /**

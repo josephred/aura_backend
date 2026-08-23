@@ -1020,9 +1020,53 @@
             align-self: flex-start;
         }
 
-        .chat-input-area {
-            padding: 16px;
+        .chat-quick-replies {
+            padding: 10px 16px 4px;
             border-top: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background-color: var(--surface-sunken);
+        }
+
+        .quick-replies-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        .quick-chips-row {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: thin;
+        }
+
+        .quick-chip {
+            background: var(--surface-raised);
+            border: 1px solid var(--card-border);
+            color: var(--text-primary);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .quick-chip:hover {
+            background: var(--accent-teal);
+            color: var(--on-accent);
+            border-color: var(--accent-teal-light);
+        }
+
+        .chat-input-area {
+            padding: 10px 16px 16px;
+            border-top: none;
             display: flex;
             gap: 8px;
         }
@@ -1276,6 +1320,16 @@
                         </div>
                         <div class="chat-scroll" id="chat-messages-box">
                             <!-- Dynamic chat bubbles -->
+                        </div>
+                        <div class="chat-quick-replies" id="chat-quick-replies">
+                            <div class="quick-replies-label">Mensajes Pre-redactados:</div>
+                            <div class="quick-chips-row">
+                                <button type="button" class="quick-chip" onclick="applyQuickReply('Hola, soy tu especialista asignado. Ya estoy preparando el equipamiento para salir hacia tu dirección.')">👋 Saludo</button>
+                                <button type="button" class="quick-chip" onclick="applyQuickReply('He iniciado el trayecto hacia tu ubicación. Voy en camino directo.')">🚗 En camino</button>
+                                <button type="button" class="quick-chip" onclick="applyQuickReply('Llegaré en aproximadamente 10 minutos a tu domicilio.')">⏱️ 10 min</button>
+                                <button type="button" class="quick-chip" onclick="applyQuickReply('He llegado al domicilio. Estoy tocando el timbre para ingresar.')">📍 En el domicilio</button>
+                                <button type="button" class="quick-chip" onclick="applyQuickReply('¿Hay algún detalle clínico o indicación adicional de acceso que deba saber?')">📋 Indicaciones</button>
+                            </div>
                         </div>
                         <div class="chat-input-area">
                             <input type="text" class="chat-input" id="chat-text-input" placeholder="Escribe un mensaje al paciente..." onkeypress="handleChatKeyPress(event)">
@@ -1945,6 +1999,17 @@
             if (e.key === 'Enter') {
                 sendChatMessage();
             }
+        }
+
+        function applyQuickReply(text) {
+            const input = document.getElementById('chat-text-input');
+            if (!input) return;
+            if (input.disabled) {
+                alert('Toma la atención para poder escribirle al paciente.');
+                return;
+            }
+            input.value = text;
+            input.focus();
         }
 
         // Map Simulation loop

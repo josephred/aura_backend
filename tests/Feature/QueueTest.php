@@ -167,7 +167,7 @@ class QueueTest extends TestCase
         $this->assertGreaterThanOrEqual(39, $servicio['en_mi_zona'][0]['esperando_minutos']);
     }
 
-    public function test_claiming_assigns_and_introduces_the_professional(): void
+    public function test_claiming_assigns_the_professional(): void
     {
         $this->makeService('medico', 'Médico');
         $this->makeProfessional('prof_a', ['medico']);
@@ -179,12 +179,6 @@ class QueueTest extends TestCase
             ->assertJsonPath('casos_abiertos', 1);
 
         $this->assertSame('prof_a', ServiceRequest::find('req_1')->professional_id);
-
-        $presentacion = ChatMessage::where('service_request_id', 'req_1')
-            ->where('sender', 'provider')
-            ->first();
-        $this->assertNotNull($presentacion);
-        $this->assertSame('Prof prof_a', $presentacion->sender_name);
     }
 
     public function test_a_second_professional_gets_a_conflict_not_a_silent_overwrite(): void
