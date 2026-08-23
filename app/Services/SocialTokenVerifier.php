@@ -52,11 +52,23 @@ class SocialTokenVerifier
 
             $data = $response->json();
 
-            $audienceOk = $data['aud'] === config('services.google.client_id');
+            $allowedAudiences = array_filter([
+                config('services.google.client_id'),
+                '932839695266-7ocgk36gsgifbl7etokb67v2mc90ub5v.apps.googleusercontent.com',
+                '932839695266-msq5o5psrfjfh72blnppfqerh66jpclb.apps.googleusercontent.com',
+            ]);
+
+            $audienceOk = in_array($data['aud'] ?? '', $allowedAudiences, true)
+                || (isset($data['azp']) && in_array($data['azp'], $allowedAudiences, true));
             $emailVerified = filter_var($data['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
             if (!$audienceOk || !$emailVerified || empty($data['sub']) || empty($data['email'])) {
-                Log::warning('Google token rejected', ['aud_ok' => $audienceOk, 'email_verified' => $emailVerified]);
+                Log::warning('Google token rejected', [
+                    'aud' => $data['aud'] ?? null,
+                    'azp' => $data['azp'] ?? null,
+                    'aud_ok' => $audienceOk,
+                    'email_verified' => $emailVerified,
+                ]);
                 return null;
             }
 

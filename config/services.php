@@ -34,7 +34,7 @@ return [
 
     'google' => [
         // OAuth client id used as the required audience of Google id_tokens
-        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_id' => env('GOOGLE_CLIENT_ID', '932839695266-7ocgk36gsgifbl7etokb67v2mc90ub5v.apps.googleusercontent.com'),
     ],
 
     'facebook' => [
