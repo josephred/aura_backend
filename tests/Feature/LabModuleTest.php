@@ -51,18 +51,21 @@ class LabModuleTest extends TestCase
 
     private function makeLabProfessional(string $id = 'prof_lab'): Professional
     {
-        return Professional::forceCreate([
+        $prof = Professional::forceCreate([
             'id' => $id,
             'name' => 'TM. Laboratorio',
             'specialty' => 'Tecnología Médica',
             'consultation_price' => 19500,
             'consultation_duration_minutes' => 30,
             'active' => true,
-            'provides_lab' => true,
             'email' => "$id@aura.cl",
             'password' => Hash::make('clave-segura-123'),
             'role' => 'professional',
         ]);
+
+        $prof->services()->sync(['laboratorio']);
+
+        return $prof;
     }
 
     /** Bloque de mañana para dentro de tres días: 08:00-10:00, cupos de 30'. */
@@ -127,7 +130,7 @@ class LabModuleTest extends TestCase
         $this->makeBlock($professional->id);
         $date = now()->addDays(3)->toDateString();
 
-        $professional->update(['provides_lab' => false]);
+        $professional->services()->detach('laboratorio');
 
         $this->getJson("/api/lab/slots?date=$date")
             ->assertStatus(200)
@@ -738,7 +741,7 @@ class LabModuleTest extends TestCase
     public function test_only_lab_enabled_professionals_can_publish(): void
     {
         $professional = $this->makeLabProfessional();
-        $professional->update(['provides_lab' => false]);
+        $professional->services()->detach('laboratorio');
 
         $this->withSession($this->staffSession($professional))
             ->postJson('/doctor/api/lab/schedules', [

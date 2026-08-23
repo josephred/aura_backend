@@ -29,7 +29,6 @@ class Professional extends Model
         'coverage_zones',
         'duty_status',
         'photo_url',
-        'provides_lab',
         'active',
         'rating_avg',
         'rating_count',
@@ -57,7 +56,6 @@ class Professional extends Model
 
     protected $casts = [
         'active' => 'boolean',
-        'provides_lab' => 'boolean',
         'last_login_at' => 'datetime',
         'years_of_experience' => 'integer',
         'rating_count' => 'integer',
@@ -100,6 +98,12 @@ class Professional extends Model
     public function attends(string $serviceId): bool
     {
         return $this->services()->where('clinical_services.id', $serviceId)->exists();
+    }
+
+    /** Compatibilidad hacia atrás: true si atiende laboratorio. */
+    public function getProvidesLabAttribute(): bool
+    {
+        return $this->attends('laboratorio');
     }
 
     /** Bloques de toma de muestras publicados por este prestador. */

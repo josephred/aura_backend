@@ -99,7 +99,7 @@ return [
     */
 
     'sse' => [
-        'enabled' => filter_var(env('AURA_SSE_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'enabled' => filter_var(env('AURA_SSE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
 
         // Cuánto sostiene el proceso cada conexión antes de cerrarla para que
         // el cliente vuelva a abrirla.

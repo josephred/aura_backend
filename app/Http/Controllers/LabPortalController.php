@@ -89,7 +89,7 @@ class LabPortalController extends Controller
         }
 
         $professional = Professional::find($professionalId);
-        if ($professional === null || !$professional->provides_lab) {
+        if ($professional === null || !$professional->attends('laboratorio')) {
             return response()->json([
                 'error' => 'Este prestador no está habilitado para toma de muestras.',
             ], 422);

@@ -57,7 +57,7 @@ class LabSchedulingService
 
         $professionals = Professional::whereIn('id', $blocks->pluck('professional_id')->unique())
             ->where('active', true)
-            ->where('provides_lab', true)
+            ->whereHas('services', fn ($q) => $q->where('clinical_services.id', 'laboratorio'))
             ->get()
             ->keyBy('id');
 
@@ -157,7 +157,7 @@ class LabSchedulingService
         }
 
         $professional = Professional::where('active', true)
-            ->where('provides_lab', true)
+            ->whereHas('services', fn ($q) => $q->where('clinical_services.id', 'laboratorio'))
             ->find($block->professional_id);
 
         if ($professional === null) {

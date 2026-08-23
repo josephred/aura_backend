@@ -102,7 +102,6 @@ class TestUsersSeeder extends Seeder
             'consultation_price' => 19500,
             'consultation_duration_minutes' => 30,
             'active' => true,
-            'provides_lab' => true,
             'coverage_zones' => 'Providencia, Ñuñoa, Santiago',
             'duty_status' => 'disponible',
             'email' => 'laboratorio@aura.cl',

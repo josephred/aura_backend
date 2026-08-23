@@ -201,8 +201,24 @@ class StaffProfileTest extends TestCase
             'consultation_price' => 19500,
             'consultation_duration_minutes' => 30,
             'active' => true,
-            'provides_lab' => true,
         ]);
+        \App\Models\ClinicalService::firstOrCreate(
+            ['id' => 'laboratorio'],
+            [
+                'title' => 'Laboratorio',
+                'short_title' => 'Lab',
+                'subtitle' => 'Exámenes',
+                'description' => 'Lab',
+                'base_price' => 19500,
+                'base_eta' => '24h',
+                'requires_prescription' => false,
+                'icon_name' => 'biotech',
+                'warning_info' => 'Info',
+                'placeholder_text' => 'Placeholder',
+            ]
+        );
+        $labProf->services()->sync(['laboratorio']);
+
         [, $labToken] = $this->staffUser('doctor_provider', $labProf->id);
 
         $this->withHeaders(['Authorization' => "Bearer $labToken"])
@@ -220,7 +236,6 @@ class StaffProfileTest extends TestCase
             'consultation_price' => 25000,
             'consultation_duration_minutes' => 30,
             'active' => true,
-            'provides_lab' => false,
         ]);
         $docUser = User::create([
             'name' => 'Dr. General Test',

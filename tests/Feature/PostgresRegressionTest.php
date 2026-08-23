@@ -85,13 +85,26 @@ class PostgresRegressionTest extends TestCase
             'name' => 'TM. Laboratorio Regresión',
             'specialty' => 'Tecnología Médica',
             'consultation_price' => 19500,
-            'consultation_duration_minutes' => 30,
             'active' => true,
-            'provides_lab' => true,
             'email' => 'lab_reg@aura.cl',
             'password' => Hash::make('clave-segura-123'),
             'role' => 'professional',
         ]);
+
+        \App\Models\ClinicalService::firstOrCreate(
+            ['id' => 'laboratorio'],
+            [
+                'title' => 'Toma de Muestras',
+                'short_title' => 'Laboratorio',
+                'subtitle' => 'Exámenes a domicilio',
+                'description' => 'Servicio de laboratorio',
+                'base_price' => 19500,
+                'base_eta' => '24 - 48 hrs',
+                'requires_prescription' => true,
+                'icon_name' => 'biotech',
+            ]
+        );
+        $prof->services()->sync(['laboratorio']);
 
         $targetDate = now()->addDays(3);
         $schedule = LabSchedule::create([

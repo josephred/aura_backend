@@ -54,7 +54,7 @@ class StaffProfileController extends Controller
             'years_of_experience' => $professional?->years_of_experience,
             'phone' => $professional?->phone,
             'photo_url' => $professional?->photo_url,
-            'provides_lab' => (bool) ($professional?->provides_lab ?? false),
+            'provides_lab' => (bool) ($professional?->attends('laboratorio') ?? false),
             'rating_avg' => $professional?->rating_avg,
             'rating_count' => $professional?->rating_count ?? 0,
         ]);
@@ -131,7 +131,7 @@ class StaffProfileController extends Controller
                 'years_of_experience' => $professional->years_of_experience,
                 'phone' => $professional->phone,
                 'photo_url' => $professional->photo_url,
-                'provides_lab' => (bool) $professional->provides_lab,
+                'provides_lab' => (bool) $professional->attends('laboratorio'),
                 'coverage_zones' => $zones->zonesCoveredBy($professional),
                 'duty_status' => $professional->duty_status,
                 'rating_avg' => $professional->rating_avg,
