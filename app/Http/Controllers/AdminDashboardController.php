@@ -106,11 +106,11 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Every professional with their duty status, coverage and portal account.
+     * Every professional with their duty status, coverage, portal account and assigned services.
      */
     public function professionals(): JsonResponse
     {
-        $professionals = Professional::orderBy('name')->get()->map(fn ($p) => [
+        $professionals = Professional::with('services')->orderBy('name')->get()->map(fn ($p) => [
             'id' => $p->id,
             'name' => $p->name,
             'specialty' => $p->specialty,
@@ -121,9 +121,113 @@ class AdminDashboardController extends Controller
             'role' => $p->role ?? 'professional',
             'has_password' => !empty($p->password),
             'last_login_at' => $p->last_login_at?->toIso8601String(),
+            'services' => $p->services->pluck('id')->all(),
         ]);
 
         return response()->json($professionals);
+    }
+
+    /**
+     * List all clinical services in the catalogue for service-assignment matrix.
+     */
+    public function services(): JsonResponse
+    {
+        return response()->json(
+            \App\Models\ClinicalService::orderBy('title')->get(['id', 'title', 'short_title'])
+        );
+    }
+
+    /**
+     * Update the services a professional is authorized to attend (professional_service pivot).
+     */
+    public function updateServices(Request $request, string $id): JsonResponse
+    {
+        $professional = Professional::find($id);
+        if (!$professional) {
+            return response()->json(['error' => 'Profesional no encontrado'], 404);
+        }
+
+        $validated = $request->validate([
+            'services' => 'required|array',
+            'services.*' => 'string|exists:clinical_services,id',
+        ]);
+
+        $professional->services()->sync($validated['services']);
+
+        return response()->json([
+            'success' => true,
+            'services' => $professional->services()->pluck('clinical_services.id')->all(),
+        ]);
+    }
+
+    /**
+     * List operation parameters (e.g. queue escalation and thresholds).
+     */
+    public function parametros(): JsonResponse
+    {
+        $defaults = [
+            'cola.casos_por_profesional' => [
+                'valor' => '2',
+                'tipo' => 'int',
+                'grupo' => 'cola',
+                'descripcion' => 'Límite máximo de solicitudes simultáneas por profesional antes de considerarlo saturado.',
+            ],
+            'cola.escalado_minutos' => [
+                'valor' => '5',
+                'tipo' => 'int',
+                'grupo' => 'cola',
+                'descripcion' => 'Minutos antes de ampliar la búsqueda a zonas vecinas (Nivel 1).',
+            ],
+            'cola.escalado_zonas_vecinas' => [
+                'valor' => '10',
+                'tipo' => 'int',
+                'grupo' => 'cola',
+                'descripcion' => 'Minutos antes de escalar a toda la región metropolitana (Nivel 2).',
+            ],
+            'cola.avisar_operaciones_minutos' => [
+                'valor' => '15',
+                'tipo' => 'int',
+                'grupo' => 'cola',
+                'descripcion' => 'Minutos máximos de espera sin prestador antes de alertar a operaciones.',
+            ],
+        ];
+
+        foreach ($defaults as $clave => $def) {
+            \App\Models\Parametro::firstOrCreate(
+                ['clave' => $clave],
+                [
+                    'valor' => $def['valor'],
+                    'tipo' => $def['tipo'],
+                    'grupo' => $def['grupo'],
+                    'descripcion' => $def['descripcion'],
+                ]
+            );
+        }
+
+        return response()->json(
+            \App\Models\Parametro::orderBy('grupo')->orderBy('clave')->get()
+        );
+    }
+
+    /**
+     * Save one or multiple operation parameters.
+     */
+    public function saveParametros(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'parametros' => 'required|array',
+            'parametros.*.clave' => 'required|string|max:100',
+            'parametros.*.valor' => 'required|string|max:500',
+        ]);
+
+        foreach ($validated['parametros'] as $item) {
+            \App\Models\Parametro::fijar($item['clave'], $item['valor']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'parametros' => \App\Models\Parametro::orderBy('grupo')->orderBy('clave')->get(),
+        ]);
     }
 
     /**

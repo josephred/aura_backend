@@ -208,27 +208,52 @@
             </table>
         </div>
 
-        <h2>Prestadores, turnos y cobertura</h2>
+        <h2>Prestadores, turnos, cobertura y servicios</h2>
         <div class="card">
             <table>
                 <thead>
                     <tr>
-                        <th style="min-width: 180px;">Profesional</th>
-                        <th style="width: 150px;">Turno</th>
-                        <th style="min-width: 220px;">Zonas que cubre</th>
-                        <th style="min-width: 200px;">Correo de acceso</th>
-                        <th style="width: 210px; text-align: right;">Acciones</th>
+                        <th style="min-width: 170px;">Profesional</th>
+                        <th style="width: 140px;">Turno</th>
+                        <th style="min-width: 160px;">Zonas que cubre</th>
+                        <th style="min-width: 220px;">Servicios habilitados</th>
+                        <th style="min-width: 180px;">Correo de acceso</th>
+                        <th style="width: 180px; text-align: right;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="professionals">
-                    <tr><td colspan="5" class="muted">Cargando prestadores…</td></tr>
+                    <tr><td colspan="6" class="muted">Cargando prestadores…</td></tr>
                 </tbody>
             </table>
+        </div>
+
+        <h2>Parámetros de Operación y Cola de Despacho</h2>
+        <div class="card">
+            <p class="muted" style="margin-top: 0; margin-bottom: 16px;">
+                Configura los umbrales de escalado automático y límites de saturación. Los cambios aplican de inmediato en el servidor sin necesidad de reiniciar.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 260px;">Parámetro</th>
+                        <th style="width: 140px;">Valor</th>
+                        <th>Descripción y propósito</th>
+                    </tr>
+                </thead>
+                <tbody id="parametros-table">
+                    <tr><td colspan="3" class="muted">Cargando parámetros…</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top: 16px; text-align: right;">
+                <span id="param-save-feedback" style="color: var(--ok); font-size: 12px; font-weight: bold; margin-right: 12px; display: none;">✓ Parámetros actualizados</span>
+                <button class="btn btn-primary" onclick="saveAllParametros()">Guardar todos los parámetros</button>
+            </div>
         </div>
     </main>
 
     <script>
         const csrf = '{{ csrf_token() }}';
+        let allServices = [];
 
         async function api(url, options = {}) {
             const response = await fetch(url, {
@@ -319,12 +344,32 @@
             }).join('');
         }
 
+        async function loadServices() {
+            try {
+                allServices = await api('/admin/api/services');
+            } catch (_) {
+                allServices = [];
+            }
+        }
+
         async function loadProfessionals() {
+            if (!allServices.length) {
+                await loadServices();
+            }
             const rows = await api('/admin/api/professionals');
             document.getElementById('professionals').innerHTML = rows.map((p) => {
                 const last = p.last_login_at
                     ? new Date(p.last_login_at).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                     : 'Nunca';
+
+                const assignedSet = new Set(p.services || []);
+                const servicesHtml = allServices.map((s) => {
+                    const checked = assignedSet.has(s.id) ? 'checked' : '';
+                    return `<label style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; margin-right: 8px; margin-bottom: 4px; cursor: pointer; background: var(--surface-2); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);">
+                        <input type="checkbox" style="width: auto; margin: 0;" class="prof-svc-${p.id}" value="${escapeHtml(s.id)}" ${checked} onchange="saveServices('${p.id}')">
+                        ${escapeHtml(s.short_title || s.title)}
+                    </label>`;
+                }).join('');
 
                 return `<tr>
                     <td>
@@ -338,13 +383,19 @@
                             <option value="desconectado" ${p.duty_status === 'desconectado' ? 'selected' : ''}>Desconectado</option>
                         </select>
                     </td>
-                    <td><input id="zones_${p.id}" value="${escapeHtml(p.coverage_zones ?? '')}" placeholder="Providencia, Ñuñoa…"></td>
+                    <td>
+                        <input id="zones_${p.id}" value="${escapeHtml(p.coverage_zones ?? '')}" placeholder="Providencia, Ñuñoa…" onblur="saveZones('${p.id}')">
+                    </td>
+                    <td>
+                        <div style="display: flex; flex-wrap: wrap; max-width: 280px;">
+                            ${servicesHtml || '<span class="muted">Sin catálogo cargado</span>'}
+                        </div>
+                    </td>
                     <td>
                         <input type="email" id="email_${p.id}" value="${escapeHtml(p.email ?? '')}" placeholder="correo@aura.cl">
                         <span class="muted">${p.has_password ? 'Último acceso: ' + last : 'Sin cuenta'}</span>
                     </td>
                     <td style="text-align: right; white-space: nowrap;">
-                        <button class="btn" onclick="saveZones('${p.id}')">Guardar zonas</button>
                         <button class="btn btn-primary" onclick="saveAccount('${p.id}')">${p.has_password ? 'Resetear clave' : 'Crear cuenta'}</button>
                     </td>
                 </tr>`;
@@ -368,6 +419,15 @@
             loadZones();
         }
 
+        async function saveServices(id) {
+            const checkboxes = document.querySelectorAll(`.prof-svc-${id}:checked`);
+            const selected = Array.from(checkboxes).map(c => c.value);
+            await api(`/admin/api/professionals/${id}/services`, {
+                method: 'POST',
+                body: JSON.stringify({ services: selected }),
+            });
+        }
+
         async function saveAccount(id) {
             const email = document.getElementById(`email_${id}`).value.trim();
             if (!email) { alert('Ingresa un correo primero.'); return; }
@@ -385,9 +445,54 @@
             loadProfessionals();
         }
 
+        async function loadParametros() {
+            const list = await api('/admin/api/parametros');
+            const tbody = document.getElementById('parametros-table');
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="3" class="muted">No hay parámetros registrados.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(p => {
+                return `<tr>
+                    <td>
+                        <strong style="font-family: monospace; color: var(--accent);">${escapeHtml(p.clave)}</strong>
+                    </td>
+                    <td>
+                        <input type="${p.tipo === 'int' ? 'number' : 'text'}" id="param_${escapeHtml(p.clave)}" value="${escapeHtml(p.valor)}" style="max-width: 110px; font-weight: bold;">
+                    </td>
+                    <td class="muted">
+                        ${escapeHtml(p.descripcion || p.clave)}
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function saveAllParametros() {
+            const inputs = document.querySelectorAll('[id^="param_"]');
+            const payload = Array.from(inputs).map(inp => {
+                const clave = inp.id.replace('param_', '');
+                return { clave: clave, valor: inp.value.trim() };
+            });
+
+            const res = await api('/admin/api/parametros', {
+                method: 'POST',
+                body: JSON.stringify({ parametros: payload }),
+            });
+
+            if (res.success) {
+                const fb = document.getElementById('param-save-feedback');
+                fb.style.display = 'inline';
+                setTimeout(() => { fb.style.display = 'none'; }, 3000);
+            } else {
+                alert('No se pudieron guardar los parámetros.');
+            }
+        }
+
         loadMetrics();
         loadZones();
-        loadProfessionals();
+        loadServices().then(() => loadProfessionals());
+        loadParametros();
         setInterval(() => { loadMetrics(); loadZones(); }, 30000);
     </script>
 </body>

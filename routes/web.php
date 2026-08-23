@@ -89,4 +89,8 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/admin/api/professionals', [AdminDashboardController::class, 'professionals']);
     Route::post('/admin/api/professionals/{id}', [AdminDashboardController::class, 'updateProfessional']);
     Route::post('/admin/api/professionals/{id}/account', [AdminDashboardController::class, 'saveAccount']);
+    Route::get('/admin/api/services', [AdminDashboardController::class, 'services']);
+    Route::post('/admin/api/professionals/{id}/services', [AdminDashboardController::class, 'updateServices']);
+    Route::get('/admin/api/parametros', [AdminDashboardController::class, 'parametros']);
+    Route::post('/admin/api/parametros', [AdminDashboardController::class, 'saveParametros']);
 });
