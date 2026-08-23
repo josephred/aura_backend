@@ -167,8 +167,64 @@
             @enderror
             <button type="submit" class="submit">Ingresar al panel</button>
         </form>
+
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px;">
+                    🧪 Cuentas de Prueba Staff
+                </span>
+                <span style="font-size: 11px; color: var(--text-muted);">Clave: <code>aura1234</code></span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="testAccountsList">
+                <button type="button" onclick="fillAndSubmit('camilarivera@aura.cl')" class="demo-chip">
+                    🩺 Dra. Camila (Médico)
+                </button>
+                <button type="button" onclick="fillAndSubmit('sebastianleyton@aura.cl')" class="demo-chip">
+                    🩺 Dr. Sebastián (Médico)
+                </button>
+                <button type="button" onclick="fillAndSubmit('mariajosediaz@aura.cl')" class="demo-chip">
+                    🏃 Klga. María José (Kine)
+                </button>
+                <button type="button" onclick="fillAndSubmit('patriciajara@aura.cl')" class="demo-chip">
+                    💉 Enf. Patricia (Enfermera)
+                </button>
+                <button type="button" onclick="fillAndSubmit('laboratorio@aura.cl')" class="demo-chip">
+                    🧪 TM. Laboratorio
+                </button>
+                <button type="button" onclick="fillAndSubmit('operador@aura.cl')" class="demo-chip" style="border-color: rgba(99, 102, 241, 0.4); color: #818cf8;">
+                    🛡️ Operador Admin
+                </button>
+                <button type="button" onclick="fillAndSubmit('profesional@aura.cl')" class="demo-chip">
+                    🩺 Profesional QA
+                </button>
+            </div>
+        </div>
     </div>
+    <style>
+        .demo-chip {
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .demo-chip:hover {
+            border-color: var(--accent);
+            background: rgba(13, 148, 136, 0.15);
+            transform: translateY(-1px);
+        }
+    </style>
     <script>
+        function fillAndSubmit(email) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = 'aura1234';
+            document.querySelector('form').submit();
+        }
         function updateThemeIcon() {
             var light = document.documentElement.getAttribute('data-theme') === 'light';
             document.getElementById('themeToggle').textContent = light ? '🌙' : '☀️';

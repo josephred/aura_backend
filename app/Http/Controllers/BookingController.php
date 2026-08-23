@@ -43,22 +43,27 @@ class BookingController extends Controller
                         (int) config('aura.lab.activation_window_minutes'),
                     ));
             })
-            // Las inmediatas primero, las agendadas despues.
-            //
-            // Esto era `orderByRaw('CASE WHEN is_scheduled = 1 ...')`, y en
-            // Postgres —que es lo que corre en produccion, porque config
-            // /database.php cae al default 'pgsql' y el Dockerfile borra
-            // DB_CONNECTION del .env— comparar un boolean con un entero es un
-            // error de tipos: "operator does not exist: boolean = integer".
-            // Este endpoint devolvia 500 siempre, y la app, que solo acepta un
-            // 200, lo interpretaba como "el paciente no tiene atencion activa":
-            // pantalla de chat en blanco y seguimiento vacio con la solicitud
-            // abierta. Los tests no lo veian porque corren en SQLite, donde
-            // `boolean = 1` es valido.
+            // Las inmediatas primero, las agendadas despues, y la mas reciente siempre primero.
             ->orderBy('is_scheduled')
+            ->orderBy('created_at', 'desc')
             ->first();
 
         return response()->json($active);
+    }
+
+    /**
+     * Get all active service requests for the user (allows switching between simultaneous attentions).
+     */
+    public function allActive(): JsonResponse
+    {
+        $actives = ServiceRequest::with('professional')
+            ->where('user_id', auth()->id())
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->orderBy('is_scheduled')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($actives);
     }
 
     /**
@@ -133,15 +138,12 @@ class BookingController extends Controller
             $symptomAudioPath = $request->file('symptom_audio')->store('symptom-audio', 'local');
         }
 
-        // Cancel any existing active request.
-        //
-        // Scheduled work is deliberately excluded: a toma de muestras booked
-        // for Thursday is a separate commitment with a reserved slot, and
-        // silently cancelling it because the patient needed a doctor today
-        // would free the slot without anyone being told.
+        // Cancelar solo solicitudes previas que estaban en cola o con pago pendiente.
+        // Si una solicitud ya fue tomada por un profesional (accepted, en_camino, en_atencion),
+        // se preserva para no anular la atencion medica en curso.
         ServiceRequest::where('user_id', auth()->id())
             ->where('is_scheduled', false)
-            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->whereIn('status', ['pending', 'pending_payment'])
             ->update(['status' => 'cancelled', 'current_step' => 0]);
 
         $timeStr = date('H:i');

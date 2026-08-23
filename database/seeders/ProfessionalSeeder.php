@@ -21,6 +21,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Dra. Camila Rivera N.',
                 'specialty' => 'Medicina Interna',
                 'bio' => 'Médico internista con 12 años de experiencia en atención de adultos y adultos mayores.',
+                'email' => 'camilarivera@aura.cl',
                 'consultation_price' => 25000,
                 'consultation_duration_minutes' => 30,
                 // Lun a vie, mañana y tarde
@@ -41,6 +42,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Dr. Sebastián Leyton',
                 'specialty' => 'Medicina General',
                 'bio' => 'Médico general orientado a medicina familiar, controles crónicos y consultas agudas.',
+                'email' => 'sebastianleyton@aura.cl',
                 'consultation_price' => 20000,
                 'consultation_duration_minutes' => 30,
                 'schedule' => [
@@ -61,6 +63,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Klga. María José Díaz',
                 'specialty' => 'Kinesiología',
                 'bio' => 'Kinesióloga especialista en rehabilitación motora y respiratoria.',
+                'email' => 'mariajosediaz@aura.cl',
                 'consultation_price' => 18000,
                 'consultation_duration_minutes' => 45,
                 'schedule' => [
@@ -80,6 +83,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Enf. Patricia Jara',
                 'specialty' => 'Enfermería',
                 'bio' => 'Enfermera clínica: controles, curaciones y educación de pacientes.',
+                'email' => 'patriciajara@aura.cl',
                 'consultation_price' => 15000,
                 'consultation_duration_minutes' => 30,
                 'schedule' => [
@@ -100,7 +104,23 @@ class ProfessionalSeeder extends Seeder
             unset($data['services']);
 
             $prof = Professional::find($data['id']) ?? new Professional(['id' => $data['id']]);
-            $prof->forceFill($data + ['active' => true])->save();
+            $prof->forceFill($data + [
+                'active' => true,
+                'password' => \Illuminate\Support\Facades\Hash::make('aura1234'),
+                'role' => 'professional',
+            ])->save();
+
+            // Sincronizar cuenta User para que pueda ingresar por app móvil
+            if (!empty($data['email'])) {
+                $user = \App\Models\User::firstOrNew(['email' => $data['email']]);
+                $user->name = $data['name'];
+                $user->password = \Illuminate\Support\Facades\Hash::make('aura1234');
+                $user->forceFill([
+                    'role' => 'doctor_provider',
+                    'is_test_account' => true,
+                    'professional_id' => $data['id'],
+                ])->save();
+            }
 
             // Sin filas en `professional_service` el despacho no le manda nada.
             $prof->services()->syncWithoutDetaching(
