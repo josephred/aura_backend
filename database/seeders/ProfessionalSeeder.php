@@ -21,7 +21,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Dra. Camila Rivera N.',
                 'specialty' => 'Medicina Interna',
                 'bio' => 'Médico internista con 12 años de experiencia en atención de adultos y adultos mayores.',
-                'email' => 'camilarivera@aura.cl',
+                'email' => 'camila.rivera@aura.cl',
                 'consultation_price' => 25000,
                 'consultation_duration_minutes' => 30,
                 // Lun a vie, mañana y tarde
@@ -42,7 +42,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Dr. Sebastián Leyton',
                 'specialty' => 'Medicina General',
                 'bio' => 'Médico general orientado a medicina familiar, controles crónicos y consultas agudas.',
-                'email' => 'sebastianleyton@aura.cl',
+                'email' => 'sebastian.leyton@aura.cl',
                 'consultation_price' => 20000,
                 'consultation_duration_minutes' => 30,
                 'schedule' => [
@@ -63,7 +63,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Klga. María José Díaz',
                 'specialty' => 'Kinesiología',
                 'bio' => 'Kinesióloga especialista en rehabilitación motora y respiratoria.',
-                'email' => 'mariajosediaz@aura.cl',
+                'email' => 'maria.jose.diaz@aura.cl',
                 'consultation_price' => 18000,
                 'consultation_duration_minutes' => 45,
                 'schedule' => [
@@ -83,7 +83,7 @@ class ProfessionalSeeder extends Seeder
                 'name' => 'Enf. Patricia Jara',
                 'specialty' => 'Enfermería',
                 'bio' => 'Enfermera clínica: controles, curaciones y educación de pacientes.',
-                'email' => 'patriciajara@aura.cl',
+                'email' => 'patricia.jara@aura.cl',
                 'consultation_price' => 15000,
                 'consultation_duration_minutes' => 30,
                 'schedule' => [

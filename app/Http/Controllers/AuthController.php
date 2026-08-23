@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Professional;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,7 +33,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Log in an existing user and issue an API token.
+     * Authenticate a user and issue an API token.
      */
     public function login(Request $request): JsonResponse
     {
@@ -69,6 +70,21 @@ class AuthController extends Controller
         ]));
 
         $user = User::whereIn('email', $candidates)->first();
+
+        // Si el usuario existe como profesional en la base de datos (con o sin cuenta User previa)
+        $professional = Professional::whereIn('email', $candidates)->first();
+        if ($professional && Hash::check($validated['password'], $professional->password)) {
+            if (!$user) {
+                $user = User::firstOrNew(['email' => $professional->email ?? $candidates[0]]);
+            }
+            $user->name = $professional->name;
+            $user->password = $professional->password;
+            $user->forceFill([
+                'role' => $professional->role === 'admin' ? 'operator_admin' : 'doctor_provider',
+                'is_test_account' => true,
+                'professional_id' => $professional->id,
+            ])->save();
+        }
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
