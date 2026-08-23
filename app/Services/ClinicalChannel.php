@@ -31,10 +31,28 @@ class ClinicalChannel
         $servicio = $this->serviceTitle($serviceRequest);
 
         $texto = $staffName
-            ? "El profesional $staffName ha tomado tu atención de $servicio y se encuentra coordinando los insumos necesarios."
-            : "Un profesional clínico ha tomado tu solicitud de $servicio.";
+            ? "$staffName tomó tu atención de $servicio."
+            : "Un profesional tomó tu solicitud de $servicio.";
 
-        $this->notify($serviceRequest, 'Profesional Asignado', $texto);
+        // Va como 'system' y en tercera persona, no firmado como el profesional.
+        //
+        // Aquí hubo un mensaje en primera persona —"Hola, soy X y voy a
+        // atenderte"— que nadie había tecleado, y quitarlo fue correcto: poner
+        // palabras en boca de una persona real es fingir. Pero quitarlo sin
+        // dejar nada convirtió el hilo en un sitio donde no consta lo que pasa:
+        // el profesional podía tomar tu caso, salir y llegar a tu puerta, y el
+        // último mensaje seguía diciendo que tu solicitud estaba en la cola.
+        // Un hecho anotado por el sistema no es una voz prestada, y es lo que
+        // el contador de no leídos puede contar.
+        ChatMessage::create([
+            'id' => ChatMessage::nextId('msg_claim'),
+            'service_request_id' => $serviceRequest->id,
+            'sender' => 'system',
+            'text' => $texto,
+            'timestamp' => date('H:i'),
+        ]);
+
+        $this->notify($serviceRequest, 'Un profesional tomó tu atención', $texto);
     }
 
     /**

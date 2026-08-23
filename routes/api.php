@@ -83,6 +83,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // 4. Booking Management
     Route::get('/bookings/active', [BookingController::class, 'active']);
     Route::get('/bookings/active-all', [BookingController::class, 'allActive']);
+    // Antes de cualquier /bookings/{id}: si no, 'unread-summary' entraria como id.
+    Route::get('/bookings/unread-summary', [BookingController::class, 'unreadSummary']);
     Route::post('/bookings', [BookingController::class, 'store']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
     Route::get('/bookings/{id}/sse', [BookingController::class, 'streamStatus']);

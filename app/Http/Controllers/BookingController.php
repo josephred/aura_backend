@@ -67,6 +67,42 @@ class BookingController extends Controller
     }
 
     /**
+     * Cuántos mensajes lleva cada atención activa del paciente.
+     *
+     * El contador de no leídos de la aplicación es por hilo, y con varias
+     * atenciones a la vez tendría que descargarlos todos en cada sondeo para
+     * saber cuántos hay sin leer en los que no estás mirando. Esto devuelve
+     * solo el total por solicitud: el cliente guarda cuántos llevaba vistos y
+     * la resta le dice lo que falta, sin traerse los hilos enteros.
+     *
+     * Se cuentan los que no escribió el propio paciente. Los suyos no le van a
+     * quedar sin leer.
+     */
+    public function unreadSummary(): JsonResponse
+    {
+        $ids = ServiceRequest::where('user_id', auth()->id())
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return response()->json([]);
+        }
+
+        $totales = ChatMessage::whereIn('service_request_id', $ids)
+            ->where('sender', '!=', 'patient')
+            ->selectRaw('service_request_id, count(*) as total')
+            ->groupBy('service_request_id')
+            ->pluck('total', 'service_request_id');
+
+        return response()->json(
+            $ids->map(fn ($id) => [
+                'booking_id' => $id,
+                'from_provider' => (int) ($totales[$id] ?? 0),
+            ])->values()
+        );
+    }
+
+    /**
      * Store a newly created service request.
      */
     public function store(Request $request): JsonResponse

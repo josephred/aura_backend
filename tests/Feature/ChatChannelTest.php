@@ -127,7 +127,7 @@ class ChatChannelTest extends TestCase
             ->assertJsonPath('0.text', '¿Sigue con fiebre?');
     }
 
-    public function test_status_updates_do_not_inject_automatic_chat_messages(): void
+    public function test_status_changes_are_recorded_in_the_thread_without_faking_a_voice(): void
     {
         $this->makeService();
         $this->makeProfessional();
@@ -143,11 +143,26 @@ class ChatChannelTest extends TestCase
             ->assertStatus(200);
         $this->post('/doctor/logout');
 
-        // Los cambios de estado no inventan mensajes de chat fingidos: solo el profesional escribe
-        $this->withHeaders($this->asPatient($patient))
+        // Queda anotado, y queda anotado como un hecho del sistema.
+        //
+        // Aqui hubo un mensaje en primera persona —"He iniciado el trayecto
+        // hacia tu ubicacion"— firmado como el profesional, que nadie habia
+        // tecleado. Quitarlo fue correcto. Quitarlo sin dejar nada dejo al
+        // paciente leyendo que su solicitud seguia en la cola mientras el
+        // profesional estaba de camino a su casa.
+        $hilo = $this->withHeaders($this->asPatient($patient))
             ->getJson('/api/bookings/req_pasos/chat')
             ->assertStatus(200)
-            ->assertJsonCount(0);
+            ->assertJsonCount(1)
+            ->json();
+
+        $this->assertSame('system', $hilo[0]['sender']);
+        $this->assertNull($hilo[0]['sender_name'] ?? null);
+        $this->assertStringContainsString('Dra. Canal', $hilo[0]['text']);
+        $this->assertStringContainsString('salió', $hilo[0]['text']);
+        // Sin voz prestada: el sistema narra en tercera persona.
+        $this->assertStringNotContainsString('He iniciado', $hilo[0]['text']);
+        $this->assertStringNotContainsString('Hola, soy', $hilo[0]['text']);
     }
 
     public function test_the_thread_is_not_readable_by_another_patient(): void
@@ -176,7 +191,8 @@ class ChatChannelTest extends TestCase
         // que alguien de la guardia la tome.
         $this->makeBooking('req_toma', $patient, null);
 
-        // Sin mensajes previos
+        // El mensaje firmado como profesional que decia "me dirijo hacia tu
+        // ubicacion" antes de que nadie la tomara ya no se escribe.
         $this->assertDatabaseCount('chat_messages', 0);
 
         $this->post('/doctor/login', [
@@ -189,8 +205,15 @@ class ChatChannelTest extends TestCase
 
         $this->assertSame('prof_chat', ServiceRequest::find('req_toma')->professional_id);
 
-        // No se crean mensajes de chat autogenerados en la toma
-        $this->assertDatabaseCount('chat_messages', 0);
+        // Que alguien tomo tu caso es lo primero que el paciente necesita saber,
+        // y el hilo es donde lo va a buscar cuando abra la aplicacion despues.
+        $aviso = ChatMessage::where('service_request_id', 'req_toma')->first();
+
+        $this->assertNotNull($aviso);
+        $this->assertSame('system', $aviso->sender);
+        $this->assertNull($aviso->sender_name);
+        $this->assertStringContainsString('Dra. Canal', $aviso->text);
+        $this->assertStringContainsString('tomó tu atención', $aviso->text);
     }
 
     public function test_a_request_already_taken_cannot_be_claimed_by_someone_else(): void
@@ -215,6 +238,54 @@ class ChatChannelTest extends TestCase
         $this->post('/doctor/logout');
 
         $this->assertSame('prof_chat', ServiceRequest::find('req_disputa')->professional_id);
+    }
+
+    public function test_the_unread_summary_counts_each_thread_without_downloading_them(): void
+    {
+        $this->makeService();
+        $this->makeProfessional();
+        $patient = $this->makePatient();
+        $otro = User::create([
+            'name' => 'Otro',
+            'email' => 'otro@aura.cl',
+            'password' => bcrypt('password123'),
+        ]);
+
+        $this->makeBooking('req_uno', $patient, 'prof_chat');
+        $this->makeBooking('req_dos', $patient, 'prof_chat');
+        $this->makeBooking('req_ajena', $otro, 'prof_chat');
+        $this->makeBooking('req_cerrada', $patient, 'prof_chat')->update(['status' => 'completed']);
+
+        $escribir = function (string $booking, string $sender, string $texto) {
+            ChatMessage::create([
+                'id' => ChatMessage::nextId('m_' . uniqid()),
+                'service_request_id' => $booking,
+                'sender' => $sender,
+                'text' => $texto,
+                'timestamp' => '10:00',
+            ]);
+        };
+
+        $escribir('req_uno', 'system', 'Un profesional tomó tu atención.');
+        $escribir('req_uno', 'provider', '¿Sigue con fiebre?');
+        // El propio paciente no cuenta: sus mensajes no le van a quedar sin leer.
+        $escribir('req_uno', 'patient', 'Sí, desde ayer');
+        $escribir('req_dos', 'system', 'Un profesional tomó tu atención.');
+        $escribir('req_ajena', 'provider', 'De otro paciente');
+        $escribir('req_cerrada', 'provider', 'De una atención ya cerrada');
+
+        $resumen = $this->withHeaders($this->asPatient($patient))
+            ->getJson('/api/bookings/unread-summary')
+            ->assertStatus(200)
+            ->json();
+
+        $porSolicitud = collect($resumen)->pluck('from_provider', 'booking_id');
+
+        $this->assertSame(2, $porSolicitud['req_uno']);
+        $this->assertSame(1, $porSolicitud['req_dos']);
+        // Ni la de otro paciente ni la ya cerrada aparecen.
+        $this->assertArrayNotHasKey('req_ajena', $porSolicitud->all());
+        $this->assertArrayNotHasKey('req_cerrada', $porSolicitud->all());
     }
 
     public function test_patient_message_is_stored_and_gets_no_automatic_reply(): void

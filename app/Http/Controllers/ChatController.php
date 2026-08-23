@@ -23,6 +23,10 @@ class ChatController extends Controller
 
         $messages = ChatMessage::where('service_request_id', $requestId)
             ->orderBy('created_at', 'asc')
+            // Desempate estable: `created_at` guarda segundos, y dos mensajes
+            // del mismo segundo salian en orden arbitrario. Sin esto el
+            // paciente y el portal podian ver el mismo par al reves.
+            ->orderBy('id')
             ->get();
 
         return response()->json($messages);

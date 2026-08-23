@@ -278,6 +278,38 @@ class DoctorDashboardController extends Controller
             );
         }
 
+        // Y queda anotado en el hilo, que es donde el paciente mira despues.
+        //
+        // El push es de un solo disparo: no lleva cuenta, no sobrevive a que lo
+        // descartes, y si no llega nadie se entera de que no llego. Sirve para
+        // golpear la puerta, no como registro. Sin esta anotacion el paciente
+        // que abre la aplicacion diez minutos mas tarde lee que su solicitud
+        // sigue en la cola mientras el profesional esta en su domicilio.
+        //
+        // 'accepted' no se anota aqui: lo hace ClinicalChannel al tomarla, y
+        // escribirlo en los dos sitios duplicaria el mismo hecho.
+        $quienAtiende = $this->staffDisplayName();
+        $eventos = [
+            'en_camino' => $quienAtiende
+                ? "$quienAtiende salió hacia tu dirección."
+                : 'El profesional salió hacia tu dirección.',
+            'en_atencion' => $quienAtiende
+                ? "$quienAtiende llegó a tu domicilio."
+                : 'El profesional llegó a tu domicilio.',
+            'completed' => 'Atención finalizada. El resumen queda en tu historial.',
+        ];
+
+        if (isset($eventos[$nextStatus])) {
+            ChatMessage::create([
+                'id' => ChatMessage::nextId('msg_paso'),
+                'service_request_id' => $serviceRequest->id,
+                // Del sistema: es un hecho anotado, no algo que alguien escribio.
+                'sender' => 'system',
+                'text' => $eventos[$nextStatus],
+                'timestamp' => date('H:i'),
+            ]);
+        }
+
         if ($nextStatus === 'completed') {
             $this->recordCompletedCare($serviceRequest);
 
@@ -343,6 +375,9 @@ class DoctorDashboardController extends Controller
 
         $messages = ChatMessage::where('service_request_id', $id)
             ->orderBy('created_at', 'asc')
+            // Mismo desempate que en ChatController: el hilo tiene que verse
+            // igual desde el portal y desde el telefono.
+            ->orderBy('id')
             ->get();
 
         return response()->json($messages);

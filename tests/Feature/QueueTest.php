@@ -167,7 +167,7 @@ class QueueTest extends TestCase
         $this->assertGreaterThanOrEqual(39, $servicio['en_mi_zona'][0]['esperando_minutos']);
     }
 
-    public function test_claiming_assigns_the_professional(): void
+    public function test_claiming_assigns_the_professional_and_says_so_in_the_thread(): void
     {
         $this->makeService('medico', 'Médico');
         $this->makeProfessional('prof_a', ['medico']);
@@ -179,6 +179,11 @@ class QueueTest extends TestCase
             ->assertJsonPath('casos_abiertos', 1);
 
         $this->assertSame('prof_a', ServiceRequest::find('req_1')->professional_id);
+
+        $aviso = ChatMessage::where('service_request_id', 'req_1')->first();
+        $this->assertNotNull($aviso);
+        $this->assertSame('system', $aviso->sender);
+        $this->assertStringContainsString('Prof prof_a', $aviso->text);
     }
 
     public function test_a_second_professional_gets_a_conflict_not_a_silent_overwrite(): void
@@ -247,6 +252,10 @@ class QueueTest extends TestCase
 
         $this->entrar('prof_a');
         $this->postJson('/doctor/api/bookings/req_1/claim')->assertStatus(200);
+        // Un segundo entre ambas: `created_at` guarda segundos y sin esto la
+        // toma y la devolucion caen en el mismo instante, con lo que "el ultimo
+        // mensaje" deja de estar definido.
+        $this->travel(1)->seconds();
         $this->postJson('/doctor/api/bookings/req_1/release')
             ->assertStatus(200)
             ->assertJsonPath('casos_abiertos', 0);
