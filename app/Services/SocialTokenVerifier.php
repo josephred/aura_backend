@@ -15,7 +15,8 @@ class SocialTokenVerifier
     public function isProviderConfigured(string $provider): bool
     {
         return match ($provider) {
-            'google' => !empty(config('services.google.client_id')),
+            'google' => config('services.google.client_id') !== null
+                && config('services.google.client_id') !== false,
             'facebook' => !empty(config('services.facebook.app_id'))
                 && !empty(config('services.facebook.app_secret')),
             default => false,
