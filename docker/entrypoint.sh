@@ -10,6 +10,7 @@ php artisan key:generate --force
 php artisan config:clear
 php artisan view:clear
 php artisan migrate --force
+php artisan db:seed --force
 
 # Arrancar supervisor con Web, Colas y Scheduler
 exec supervisord -c /var/www/html/docker/supervisord.conf
