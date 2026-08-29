@@ -21,21 +21,20 @@ class TestUsersSeeder extends Seeder
 {
     public const PASSWORD = 'aura1234';
 
-    /** email => [id, name, role] */
+    /** email => [name, role] */
     public const ACCOUNTS = [
-        'paciente@aura.cl' => [10, 'Paciente de Prueba', 'patient'],
-        'tutor@aura.cl' => [11, 'Tutor de Prueba', 'dependent_tutor'],
-        'profesional@aura.cl' => [12, 'Profesional de Prueba', 'doctor_provider'],
-        'operador@aura.cl' => [13, 'Operador de Prueba', 'operator_admin'],
-        'conductor@aura.cl' => [14, 'Conductor de Prueba', 'ambulance_driver'],
+        'paciente@aura.cl' => ['Paciente de Prueba', 'patient'],
+        'tutor@aura.cl' => ['Tutor de Prueba', 'dependent_tutor'],
+        'profesional@aura.cl' => ['Profesional de Prueba', 'doctor_provider'],
+        'operador@aura.cl' => ['Operador de Prueba', 'operator_admin'],
+        'conductor@aura.cl' => ['Conductor de Prueba', 'ambulance_driver'],
     ];
 
     public function run(): void
     {
-        foreach (self::ACCOUNTS as $email => [$id, $name, $role]) {
-            $user = User::updateOrCreate(['id' => $id], [
+        foreach (self::ACCOUNTS as $email => [$name, $role]) {
+            $user = User::updateOrCreate(['email' => $email], [
                 'name' => $name,
-                'email' => $email,
                 'password' => Hash::make(self::PASSWORD),
             ]);
 
@@ -52,16 +51,18 @@ class TestUsersSeeder extends Seeder
 
             // Every test account gets an address in a covered zone so the
             // zone-based ETA has something real to work with.
-            SavedAddress::updateOrCreate(['id' => "addr_test_$id"], [
+            SavedAddress::updateOrCreate(['id' => "addr_test_{$user->id}"], [
                 'user_id' => $user->id,
                 'label' => 'Casa (cuenta de prueba)',
                 'text' => 'Av. Providencia 1234, Providencia, Santiago',
             ]);
         }
 
+        $tutorUser = User::where('email', 'tutor@aura.cl')->first();
+
         // The tutor account needs someone to be a tutor of.
         Dependent::updateOrCreate(['id' => 'dep_test_tutor'], [
-            'user_id' => 11,
+            'user_id' => $tutorUser ? $tutorUser->id : 11,
             'name' => 'Lucía Fernández (menor)',
             'relationship' => 'Hija',
             'age' => 6,
@@ -115,9 +116,8 @@ class TestUsersSeeder extends Seeder
         );
 
         // Su contraparte en la app, para que pueda trabajar desde el teléfono.
-        $labUser = User::updateOrCreate(['id' => 15], [
+        $labUser = User::updateOrCreate(['email' => 'laboratorista@aura.cl'], [
             'name' => 'Laboratorista de Prueba',
-            'email' => 'laboratorista@aura.cl',
             'password' => Hash::make(self::PASSWORD),
         ]);
         $labUser->forceFill([
