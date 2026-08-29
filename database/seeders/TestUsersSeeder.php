@@ -140,7 +140,7 @@ class TestUsersSeeder extends Seeder
         ])->save();
 
         $this->command?->info('Cuentas de prueba creadas (contraseña: ' . self::PASSWORD . ')');
-        foreach (self::ACCOUNTS as $email => [, , $role]) {
+        foreach (self::ACCOUNTS as $email => [, $role]) {
             $this->command?->line("  - $email  ($role)");
         }
         $this->command?->line('  - laboratorista@aura.cl  (doctor_provider · laboratorio)');
